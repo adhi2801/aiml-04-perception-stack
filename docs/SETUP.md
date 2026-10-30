@@ -22,6 +22,31 @@ Extract `CARLA_0.9.16.zip`, then start it with low settings so CARLA and the mod
 The first start triggers a Windows Firewall prompt. Allow **private networks**, since WSL reaches CARLA through it.
 Drop `-RenderOffScreen` to watch the spectator view (costs ~0.5 GB VRAM).
 
+### Running CARLA on a 4 GB GPU / 16 GB RAM laptop (what actually worked)
+Measured on a GTX 1650 4 GB, i7-11370H, 16 GB RAM:
+
+| Launch | Result |
+|---|---|
+| `-quality-level=Low -RenderOffScreen` (default flags) | allocated 2.7 GB VRAM, then the process vanished during map load, with no log |
+| `+ -windowed -ResX=640 -ResY=360` | 3.8 GB VRAM + 4.8 GB RAM at 20 s, then exited |
+| `+ -dx11 -ini:Engine:[/Script/Engine.RendererSettings]:r.Streaming.PoolSize=300` | **stable**: ~3.4 GB RAM, 3.9 GB VRAM |
+
+Root cause: the Windows **commit limit**. Once VRAM is full, the driver spills into shared system memory,
+which counts against the same budget as every open app. With a browser, an IDE, Steam and Docker
+Desktop open, ~23 of 33 GB was already committed, so CARLA (and later Python + YOLO) pushed it over and the
+OS killed the process before Unreal could write a crash log.
+
+Recipe that runs:
+```powershell
+.\CARLA_0.9.16\CarlaUE4.exe -quality-level=Low -dx11 -windowed -ResX=480 -ResY=270 -nosound `
+  "-ini:Engine:[/Script/Engine.RendererSettings]:r.Streaming.PoolSize=300"
+```
+- Close browsers, IDEs and game launchers first (aim for **≥ 8 GB free commit**:
+  `(Get-CimInstance Win32_OperatingSystem).FreeVirtualMemory/1MB`).
+- Use `configs/pipeline_lowvram.yaml` (800×450 cameras).
+- CARLA leaves ~200 MB of VRAM, so run detection on the CPU (`$env:CUDA_VISIBLE_DEVICES=""`) or use the TensorRT
+  engine with a small workspace. Report FPS for the setup you actually used.
+
 ## 2. Direct mode (no ROS, Windows only)
 For batch evaluation and the demo video, everything runs from the Windows venv:
 ```powershell
