@@ -28,7 +28,8 @@ def frames(seq: Path, stride: int):
     for g in gts[::stride]:
         name = f"{g['frame']:06d}"
         yield (cv2.imread(str(seq / "rgb" / f"{name}.jpg")),
-               np.load(seq / "depth" / f"{name}.npy").astype(np.float32), g["objects"])
+               cv2.imread(str(seq / "depth" / f"{name}.png"), cv2.IMREAD_UNCHANGED).astype(np.float32) / 100.0,
+               g["objects"])
 
 
 def main() -> None:

@@ -4,7 +4,7 @@
   python carla_tools/record_dataset.py --town Town10HD_Opt --frames 600 --weather WetCloudyNoon --out data/carla/Town10_test
 
 One folder per sequence:
-  rgb/000123.jpg  depth/000123.npy (float16 meters)  lanes/000123.png (255 = lane marking)  gt.jsonl
+  rgb/000123.jpg  depth/000123.png (uint16 centimetres)  lanes/000123.png (255 = lane marking)  gt.jsonl
 Used for: lane model training/eval, MiDaS scale calibration, depth error by distance, MOT metrics.
 """
 from __future__ import annotations
@@ -98,7 +98,8 @@ def main() -> None:
                 tags = np.frombuffer(sem.raw_data, np.uint8).reshape(sem.height, sem.width, 4)[..., 2]
                 name = f"{saved:06d}"
                 cv2.imwrite(str(args.out / "rgb" / f"{name}.jpg"), bgr, [cv2.IMWRITE_JPEG_QUALITY, 92])
-                np.save(args.out / "depth" / f"{name}.npy", depth.astype(np.float16))
+                # uint16 centimetres in a lossless PNG: ~5-10x smaller than raw float arrays, 1 cm resolution
+                cv2.imwrite(str(args.out / "depth" / f"{name}.png"), np.clip(depth * 100, 0, 65535).astype(np.uint16))
                 cv2.imwrite(str(args.out / "lanes" / f"{name}.png"), ((tags == ROAD_LINE_TAG) * 255).astype(np.uint8))
                 gt_file.write(json.dumps({"frame": saved, "t": round(tick / 20, 3), "objects":
                                           gt_boxes(world, rgb_cam, ego, spec, depth)}) + "\n")
