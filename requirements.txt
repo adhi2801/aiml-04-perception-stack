@@ -1,0 +1,18 @@
+# Install torch first with the CUDA wheel for your GPU:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+torch>=2.4
+torchvision>=0.19
+ultralytics>=8.3
+opencv-python>=4.10
+numpy>=1.26
+pyyaml>=6.0
+matplotlib>=3.9
+timm>=1.0                  # required by MiDaS via torch.hub
+motmetrics>=1.4
+onnx>=1.16
+onnxslim>=0.1
+onnxruntime-gpu>=1.19      # ONNX Runtime CUDA execution provider for the benchmark
+tensorrt-cu12>=10.3,<11  # TensorRT 11 needs NVIDIA ModelOpt for FP16 export; 10.x is mature on Turing GPUs
+wandb>=0.18
+pytest>=8.3
+carla==0.9.16              # Python API, must match the simulator version

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "perception"
+version = "0.1.0"
+description = "Camera perception stack: YOLO + ByteTrack, lanes, MiDaS depth, AEB; CARLA + ROS2; ONNX/TensorRT"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

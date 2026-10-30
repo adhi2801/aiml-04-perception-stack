@@ -1,0 +1,35 @@
+# Runtime configuration shared by the offline pipeline, the CARLA runner and the ROS2 nodes.
+camera:
+  width: 1280
+  height: 720
+  fov_deg: 90
+  mount_height_m: 1.5          # used by the ground-plane distance estimate
+
+detector:
+  weights: models/yolo11s_bdd.engine   # .pt | .onnx | .engine (TensorRT) - same API for all
+  imgsz: 640
+  conf: 0.30
+  iou: 0.5
+  half: true
+
+tracker: bytetrack.yaml        # ultralytics built-in ByteTrack config
+
+depth:
+  model: MiDaS_small           # MiDaS_small (fast) | DPT_Hybrid (accurate)
+  # metric depth z = 1 / (scale * inv_rel + shift); fit with carla_tools/calibrate_depth.py
+  scale: null
+  shift: null
+
+lanes:
+  # bird's-eye-view source trapezoid as fractions of (width, height): bottom-left, top-left, top-right, bottom-right
+  src: [[0.16, 0.95], [0.44, 0.63], [0.56, 0.63], [0.86, 0.95]]
+  smoothing: 0.7               # EMA weight on previous polynomial (temporal stability)
+
+aeb:
+  vulnerable_classes: [pedestrian, rider, bicycle, motorcycle]
+  ttc_warn_s: 3.0
+  ttc_brake_s: 1.8
+  min_distance_m: 6.0          # brake for anything in corridor closer than this
+  corridor_half_width: 0.18    # fallback ego corridor (fraction of image width) when no lanes are found
+  hold_frames: 15              # keep braking this many frames after the threat clears (hysteresis)
+  history: 8                   # samples used to fit d(t) for TTC

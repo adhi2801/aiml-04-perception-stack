@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+wandb/
+runs/
+
+# large artifacts: models and data are on Google Drive / W&B artifacts, not git
+/data/
+/models/
+*.pt
+*.onnx
+*.engine
+*.mp4
+
+# ROS2 build outputs
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+*.egg-info/
