@@ -137,13 +137,14 @@ def main() -> None:
     ap.add_argument("--speed-boost", type=float, default=0, help="%% faster than the speed limit")
     ap.add_argument("--oracle-depth", action="store_true")
     ap.add_argument("--config", default="configs/pipeline.yaml")
+    ap.add_argument("--weights", help="override detector weights, e.g. yolo11s.pt (COCO baseline)")
     ap.add_argument("--video", type=Path)
     ap.add_argument("--video-w", type=int, default=1280)
     args = ap.parse_args()
 
     client = carla.Client(args.host, args.port)
     client.set_timeout(30)
-    pipe = PerceptionPipeline(args.config, use_depth_model=not args.oracle_depth)
+    pipe = PerceptionPipeline(args.config, use_depth_model=not args.oracle_depth, weights=args.weights)
     writer = None
     if args.video:
         args.video.parent.mkdir(parents=True, exist_ok=True)

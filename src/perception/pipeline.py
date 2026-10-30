@@ -22,6 +22,10 @@ from perception.fusion.aeb import AEB, Action, AEBConfig, Threat, TrackedObject
 from perception.lanes.classical import ClassicalLaneDetector, LaneResult
 
 COLORS = {Action.CRUISE: (80, 200, 80), Action.WARN: (0, 200, 255), Action.BRAKE: (0, 0, 255)}
+# COCO-pretrained baselines use different names for the classes AEB cares about; normalize to BDD100K names.
+CLASS_ALIASES = {"person": "pedestrian", "motorbike": "motorcycle"}
+DRIVING_CLASSES = {"pedestrian", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle",
+                   "traffic light", "traffic sign", "stop sign"}
 
 
 @dataclass
@@ -34,15 +38,16 @@ class FrameResult:
 
 
 class PerceptionPipeline:
-    def __init__(self, cfg_path: str | Path = "configs/pipeline.yaml", use_depth_model: bool = True):
+    def __init__(self, cfg_path: str | Path = "configs/pipeline.yaml", use_depth_model: bool = True,
+                 weights: str | None = None):
         from ultralytics import YOLO
 
         self.cfg = yaml.safe_load(Path(cfg_path).read_text())
         cam, det = self.cfg["camera"], self.cfg["detector"]
         self.w, self.h, self.fov = cam["width"], cam["height"], cam["fov_deg"]
         self.cam_h = cam["mount_height_m"]
-        self.model = YOLO(det["weights"], task="detect")
-        self.names = self.model.names
+        self.model = YOLO(weights or det["weights"], task="detect")
+        self.names = {i: CLASS_ALIASES.get(n, n) for i, n in self.model.names.items()}
         self.lanes = ClassicalLaneDetector(self.w, self.h, self.cfg["lanes"]["src"], self.cfg["lanes"]["smoothing"])
         self.aeb = AEB(AEBConfig.from_dict(self.cfg["aeb"]))
         dcfg = self.cfg["depth"]
@@ -75,6 +80,8 @@ class PerceptionPipeline:
         if boxes is not None and boxes.id is not None:
             for xyxy, cls, conf, tid in zip(boxes.xyxy.cpu().numpy(), boxes.cls.cpu().numpy().astype(int),
                                             boxes.conf.cpu().numpy(), boxes.id.cpu().numpy().astype(int)):
+                if self.names[int(cls)] not in DRIVING_CLASSES:  # COCO baseline also sees cups, benches, ...
+                    continue
                 box = tuple(float(v) for v in xyxy)
                 dist = object_distance(depth_m, box) if depth_m is not None else \
                     ground_plane_distance(box, self.h, self.w, self.fov, self.cam_h)

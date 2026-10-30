@@ -77,7 +77,7 @@ def attach_collision(world, actors, ego) -> list:
     return events
 
 
-def get_frame(q: queue.Queue, frame: int, timeout: float = 5.0):
+def get_frame(q: queue.Queue, frame: int, timeout: float = 30.0):
     """Pop until the sensor image for this exact simulation frame arrives (sensors can lag a tick)."""
     while True:
         img = q.get(timeout=timeout)
