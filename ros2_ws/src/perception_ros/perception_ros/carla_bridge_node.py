@@ -32,7 +32,7 @@ class CarlaBridge(Node):
         super().__init__("carla_bridge")
         p = {k: self.declare_parameter(k, v).value for k, v in {
             "host": os.environ.get("CARLA_HOST", "localhost"), "port": 2000, "fps": 20.0, "spawn_index": 0,
-            "scenario": "pedestrian_crossing", "width": 1280, "height": 720, "fov": 90.0, "seed": 0}.items()}
+            "scenario": "cpna25", "width": 1280, "height": 720, "fov": 90.0, "seed": 0}.items()}
         self.client = carla.Client(p["host"], p["port"])
         self.client.set_timeout(30.0)
         self.world = self.client.get_world()
@@ -57,7 +57,8 @@ class CarlaBridge(Node):
         self.hazard_tick = None
         if p["scenario"] != "none":
             from run_scenarios import setup_hazard
-            _, self.hazard_tick = setup_hazard(self.world, self.actors, self.ego, p["scenario"], random.Random(p["seed"]))
+            _, self.hazard_tick = setup_hazard(self.world, self.actors, self.ego, p["scenario"], random.Random(p["seed"]),
+                                               self.tm)
 
         self.command, self.braking, self.step = 0, False, 0
         self.pub_rgb = self.create_publisher(Image, "/carla/ego/rgb", qos_profile_sensor_data)

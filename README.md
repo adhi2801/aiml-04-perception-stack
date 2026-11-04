@@ -25,7 +25,7 @@ Every number is written by a script into `reports/` (nothing is typed by hand).
 | How good is tracking? (MOTA, IDF1, ID switches) | `perception.eval_tracking` | _…_ |
 | Classical vs learned lanes (F1, latency, rain/night) | `perception.lanes.evaluate` | _…_ |
 | How far off are distance estimates, by range? | `perception.depth.evaluate` | _…_ |
-| **Does the car stop in time?** (collision rate, min gap, reaction time over N trials) | `carla_tools/run_scenarios.py` | _…_ |
+| **Does the car stop in time?** Euro NCAP-style CPNA-25 / CPFA-50 / CCRb at 20-40 km/h: avoided rate, speed reduction, reaction time | `carla_tools/run_scenarios.py` | _…_ |
 
 ## Architecture
 
@@ -77,12 +77,23 @@ thing that can stop the car is this stack.
    python -m perception.depth.evaluate --calib data/carla/Town03_clear --test data/carla/Town10_test --write-config
    python -m perception.eval_tracking --seq data/carla/Town10_test --weights models/yolo11s_bdd.engine
    ```
-5. **Closed-loop safety test and demo video:**
+5. **Closed-loop safety test (Euro NCAP-style scenarios) and demo video:**
    ```bash
-   python carla_tools/run_scenarios.py --scenario pedestrian_crossing --trials 10 --video reports/demo_pedestrian.mp4
-   python carla_tools/run_scenarios.py --scenario lead_vehicle_brake --trials 10
+   python carla_tools/run_scenarios.py --scenario cpna25 --speeds 20,30,40 --trials 5 --video reports/demo_cpna25.mp4
+   python carla_tools/run_scenarios.py --scenario cpfa50 --speeds 20,30,40 --trials 5
+   python carla_tools/run_scenarios.py --scenario ccrb --speeds 30,40 --trials 5
    ```
-6. **Through ROS2:** `ros2 launch perception_ros perception.launch.py scenario:=pedestrian_crossing`
+   | Scenario | What happens (if the car does not brake) |
+   |---|---|
+   | CPNA-25 / CPNA-75 | Adult walks in from the kerb side at 5 km/h and is hit at 25% / 75% of the car's width |
+   | CPFA-50 | Adult walks in from the far side at 8 km/h and is hit at the centre of the bumper |
+   | CCRb | The lead car ahead at the same speed brakes as hard as it can |
+
+   The pedestrian is released at exactly the moment that makes an un-braked car hit them, so every avoided collision
+   is the AEB's doing. The score per test speed is the avoided rate and the mean speed reduction, which is the basis of
+   Euro NCAP's AEB score up to 40 km/h. Speeds and overlaps follow the protocol, but the geometry is simplified, so
+   these are Euro NCAP-*style* results, not a rating.
+6. **Through ROS2:** `ros2 launch perception_ros perception.launch.py scenario:=cpna25`
 
 ## ROS2 interface
 | Topic | Type | Publisher |

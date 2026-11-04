@@ -50,7 +50,7 @@ Recipe that runs:
 ## 2. Direct mode (no ROS, Windows only)
 For batch evaluation and the demo video, everything runs from the Windows venv:
 ```powershell
-.venv\Scripts\python carla_tools\run_scenarios.py --scenario pedestrian_crossing --trials 10 --video reports\demo_pedestrian.mp4
+.venv\Scripts\python carla_tools\run_scenarios.py --scenario cpna25 --speeds 20,30,40 --trials 5 --video reports\demo_cpna25.mp4
 ```
 
 ## 3. WSL2 distro with ROS2 Jazzy
@@ -71,7 +71,7 @@ nvidia-smi                                # the Windows driver exposes the GPU t
 cd ros2_ws && colcon build --symlink-install && source install/setup.bash
 export PERCEPTION_ROOT=$(realpath ..)
 export CARLA_HOST=$(ip route show default | awk '{print $3}')   # the Windows host as seen from WSL
-ros2 launch perception_ros perception.launch.py scenario:=pedestrian_crossing
+ros2 launch perception_ros perception.launch.py scenario:=cpna25
 # another terminal:
 ros2 topic hz /perception/objects ; ros2 topic echo /aeb/status
 ```

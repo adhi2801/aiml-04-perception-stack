@@ -1,4 +1,4 @@
-"""ros2 launch perception_ros perception.launch.py scenario:=pedestrian_crossing oracle_depth:=false"""
+"""ros2 launch perception_ros perception.launch.py scenario:=cpna25 oracle_depth:=false  (scenarios: cpna25, cpna75, cpfa50, ccrb, none)"""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     args = {
         "carla_host": EnvironmentVariable("CARLA_HOST", default_value="localhost"),
-        "scenario": "pedestrian_crossing",
+        "scenario": "cpna25",
         "oracle_depth": "false",
         "spawn_index": "0",
     }
