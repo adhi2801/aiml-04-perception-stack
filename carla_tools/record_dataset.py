@@ -62,6 +62,8 @@ def main() -> None:
     ap.add_argument("--vehicles", type=int, default=40)
     ap.add_argument("--walkers", type=int, default=60)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--height", type=int, default=720, help="use 800x450 with configs/pipeline_lowvram.yaml")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
@@ -69,7 +71,7 @@ def main() -> None:
         (args.out / sub).mkdir(parents=True, exist_ok=True)
     client = carla.Client(args.host, args.port)
     client.set_timeout(60)
-    spec = CamSpec()
+    spec = CamSpec(args.width, args.height)
     with sync_world(client, fps=20, town=args.town) as (world, tm, actors):
         world.set_weather(getattr(carla.WeatherParameters, args.weather))
         ego = spawn_ego(world, actors, spawn_index=0)

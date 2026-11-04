@@ -27,7 +27,9 @@ def intrinsics(spec: CamSpec) -> np.ndarray:
 @contextmanager
 def sync_world(client: carla.Client, fps: float = 20.0, town: str | None = None):
     """Deterministic fixed-step simulation; settings are restored even if the script crashes."""
-    world = client.load_world(town) if town else client.get_world()
+    world = client.get_world()
+    if town and world.get_map().name.split("/")[-1] != town:  # reloading the same map costs ~1 min and a memory spike
+        world = client.load_world(town)
     original = world.get_settings()
     settings = world.get_settings()
     settings.synchronous_mode = True
