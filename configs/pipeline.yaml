@@ -16,7 +16,7 @@ tracker: bytetrack.yaml        # ultralytics built-in ByteTrack config
 
 depth:
   model: MiDaS_small           # MiDaS_small (fast) | DPT_Hybrid (accurate)
-  # metric depth z = 1 / (scale * inv_rel + shift); fit with carla_tools/calibrate_depth.py
+  # metric depth z = 1 / (scale * inv_rel + shift); fit with `python -m perception.depth.evaluate --write-config`
   scale: null
   shift: null
 

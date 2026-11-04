@@ -1,4 +1,5 @@
-# Low-VRAM profile (4 GB GPUs running CARLA on the same card): 800x450 cameras, otherwise identical to pipeline.yaml.
+# Low-VRAM profile (4 GB GPUs running CARLA on the same card): 800x450 cameras and detection/depth on the CPU,
+# so CARLA keeps the whole GPU. Otherwise identical to pipeline.yaml.
 camera:
   width: 800
   height: 450
@@ -6,17 +7,19 @@ camera:
   mount_height_m: 1.5          # used by the ground-plane distance estimate
 
 detector:
-  weights: models/yolo11s_bdd.engine   # .pt | .onnx | .engine (TensorRT) - same API for all
+  weights: yolo11n.pt          # COCO baseline on CPU (a TensorRT .engine only runs on the GPU); swap in the BDD fine-tune once trained
   imgsz: 640
   conf: 0.30
   iou: 0.5
-  half: true
+  half: true                   # ignored on CPU
+  device: cpu                  # CARLA needs the 4 GB card to itself; omit to use the GPU
 
 tracker: bytetrack.yaml        # ultralytics built-in ByteTrack config
 
 depth:
   model: MiDaS_small           # MiDaS_small (fast) | DPT_Hybrid (accurate)
-  # metric depth z = 1 / (scale * inv_rel + shift); fit with carla_tools/calibrate_depth.py
+  device: cpu
+  # metric depth z = 1 / (scale * inv_rel + shift); fit with `python -m perception.depth.evaluate --write-config`
   scale: null
   shift: null
 

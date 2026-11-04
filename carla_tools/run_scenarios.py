@@ -195,6 +195,7 @@ def main() -> None:
     reactions = [t["reaction_s"] for t in trials if t["reaction_s"] is not None]
     by_speed = sc.summarize(trials)
     summary = {"scenario": scenario.name, "trials": len(trials), "oracle_depth": args.oracle_depth,
+               "config": args.config, "weights": args.weights or pipe.cfg["detector"]["weights"],
                "by_speed": by_speed,
                "collision_rate": round(sum(t["collided"] for t in trials) / len(trials), 3),
                "brake_rate": round(sum(t["braked"] for t in trials) / len(trials), 3),

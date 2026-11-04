@@ -54,7 +54,7 @@ class PerceptionPipeline:
         self.depth_model = None
         if use_depth_model:
             from perception.depth.midas import MiDaS
-            self.depth_model = MiDaS(dcfg["model"])
+            self.depth_model = MiDaS(dcfg["model"], device=dcfg.get("device"))
         self.depth_scale, self.depth_shift = dcfg.get("scale"), dcfg.get("shift")
 
     def __call__(self, bgr: np.ndarray, t: float | None = None, gt_depth: np.ndarray | None = None) -> FrameResult:
@@ -64,7 +64,7 @@ class PerceptionPipeline:
 
         t0 = time.perf_counter()
         r = self.model.track(bgr, imgsz=det["imgsz"], conf=det["conf"], iou=det["iou"], half=det["half"],
-                             tracker=self.cfg["tracker"], persist=True, verbose=False)[0]
+                             tracker=self.cfg["tracker"], persist=True, device=det.get("device"), verbose=False)[0]
         timings["detect_track"] = (time.perf_counter() - t0) * 1000
 
         t0 = time.perf_counter()
