@@ -53,7 +53,8 @@ def spawn_traffic(client, world, tm, actors, n_vehicles: int, n_walkers: int, se
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="localhost")
+  # 127.0.0.1, not localhost: CARLA listens on IPv4 only and localhost can resolve to ::1
+    ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=2000)
     ap.add_argument("--town", default="Town03")
     ap.add_argument("--weather", default="ClearNoon", help="any carla.WeatherParameters preset name")

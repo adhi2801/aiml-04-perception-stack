@@ -36,9 +36,20 @@ which counts against the same budget as every open app. With a browser, an IDE, 
 Desktop open, ~23 of 33 GB was already committed, so CARLA (and later Python + YOLO) pushed it over and the
 OS killed the process before Unreal could write a crash log.
 
+That recipe keeps an idle server alive, but **cameras did not work on it** (measured 2026-11-05, NVIDIA driver 610.91):
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| With DX11, a camera delivers ~5 frames, then the server stops answering; repeated `EXCEPTION_ACCESS_VIOLATION` crash reports | Unreal 4.26's DX11 renderer with this driver | **`-dx12`**: steady ~63 FPS from a 640×360 camera over 20 s |
+| `streaming client: connection failed ... refused` | `localhost` can resolve to `::1`; CARLA listens on IPv4 only | connect to `127.0.0.1` (the scripts' default) |
+| Town10HD idle used 3.9 GB VRAM and left ~2 GB of commit; switching maps crashed it | Town10HD is the heaviest map, and a map switch briefly holds both | start directly on **Town03_Opt** (set `GameDefaultMap`/`ServerDefaultMap` in `CarlaUE4/Config/DefaultEngine.ini`): 1.9 GB VRAM idle |
+
+With those three changes, RGB + depth + semantic cameras at 800×450 plus 20 autopilot vehicles run at
+20 synchronous ticks per second (real time) using 2.5 GB of VRAM.
+
 Recipe that runs:
 ```powershell
-.\CARLA_0.9.16\CarlaUE4.exe -quality-level=Low -dx11 -windowed -ResX=480 -ResY=270 -nosound `
+.\CARLA_0.9.16\CarlaUE4.exe -quality-level=Low -dx12 -windowed -ResX=320 -ResY=180 -nosound `
   "-ini:Engine:[/Script/Engine.RendererSettings]:r.Streaming.PoolSize=300"
 ```
 - Close browsers, IDEs and game launchers first (aim for **≥ 8 GB free commit**:

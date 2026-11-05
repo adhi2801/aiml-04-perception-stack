@@ -158,7 +158,8 @@ def run_trial(client, pipe: PerceptionPipeline, args, trial: int, test_kmh: floa
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default=os.environ.get("CARLA_HOST", "localhost"))
+  # 127.0.0.1, not localhost: CARLA listens on IPv4 only and localhost can resolve to ::1
+    ap.add_argument("--host", default=os.environ.get("CARLA_HOST", "127.0.0.1"))
     ap.add_argument("--port", type=int, default=2000)
     ap.add_argument("--scenario", choices=[*sc.SCENARIOS, *sc.ALIASES], default="cpna25")
     ap.add_argument("--speeds", default="20,30,40", help="comma-separated test speeds in km/h")
