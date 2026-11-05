@@ -1,6 +1,6 @@
 """Classical (OpenCV) vs learned (LR-ASPP) lane detection on held-out CARLA sequences.
 
-  python -m perception.lanes.evaluate --seq data/carla/Town10_test --weights models/lane_lraspp.pt
+  python -m perception.lanes.evaluate --seq data/carla/Town02_test --weights models/lane_lraspp.pt
 
 Metrics (lower half of the image, where lanes matter for control):
   * tolerant pixel precision / recall / F1: a predicted pixel counts if a GT lane pixel is within

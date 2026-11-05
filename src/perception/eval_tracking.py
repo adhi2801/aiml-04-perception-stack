@@ -1,7 +1,7 @@
 """Multi-object tracking metrics (MOTA, IDF1, ID switches) against CARLA ground-truth actor IDs.
 
-  python -m perception.eval_tracking --seq data/carla/Town10_test --weights models/yolo11s_bdd.engine --tracker bytetrack.yaml
-  python -m perception.eval_tracking --seq data/carla/Town10_test --weights models/yolo11s_bdd.engine --tracker botsort.yaml
+  python -m perception.eval_tracking --seq data/carla/Town02_test --weights models/yolo11s_bdd.engine --tracker bytetrack.yaml
+  python -m perception.eval_tracking --seq data/carla/Town02_test --weights models/yolo11s_bdd.engine --tracker botsort.yaml
 
 Comparing trackers on identical detections isolates association quality from detection quality.
 """

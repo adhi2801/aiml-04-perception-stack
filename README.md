@@ -69,13 +69,13 @@ thing that can stop the car is this stack.
    ```
 4. **Record synthetic data, then evaluate lanes, depth and tracking:**
    ```bash
-   python carla_tools/record_dataset.py --town Town03 --out data/carla/Town03_clear
-   python carla_tools/record_dataset.py --town Town05 --weather HardRainNoon --out data/carla/Town05_rain
-   python carla_tools/record_dataset.py --town Town10HD_Opt --weather WetCloudySunset --out data/carla/Town10_test
-   python -m perception.lanes.seg_model --train data/carla/Town03_clear data/carla/Town05_rain --val data/carla/Town10_test
-   python -m perception.lanes.evaluate --seq data/carla/Town10_test
-   python -m perception.depth.evaluate --calib data/carla/Town03_clear --test data/carla/Town10_test --write-config
-   python -m perception.eval_tracking --seq data/carla/Town10_test --weights models/yolo11s_bdd.engine
+   python carla_tools/record_dataset.py --town Town03_Opt --spawn 0 --width 800 --height 450 --out data/carla/Town03_clear
+   python carla_tools/record_dataset.py --town Town03_Opt --weather MidRainyNoon --seed 1 --width 800 --height 450 --out data/carla/Town03_rain
+   python carla_tools/record_dataset.py --town Town02_Opt --weather WetCloudySunset --seed 2 --vehicles 50 --walkers 100 --width 800 --height 450 --out data/carla/Town02_test
+   python -m perception.lanes.seg_model --train data/carla/Town03_clear data/carla/Town03_rain --val data/carla/Town02_test
+   python -m perception.lanes.evaluate --seq data/carla/Town02_test
+   python -m perception.depth.evaluate --calib data/carla/Town03_clear --test data/carla/Town02_test --write-config
+   python -m perception.eval_tracking --seq data/carla/Town02_test --weights models/yolo11s_bdd.engine
    ```
 5. **Closed-loop safety test (Euro NCAP-style scenarios) and demo video:**
    ```bash

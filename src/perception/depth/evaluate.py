@@ -1,6 +1,6 @@
 """Calibrate MiDaS to meters on training sequences, then measure distance error on held-out ones.
 
-  python -m perception.depth.evaluate --calib data/carla/Town03_clear --test data/carla/Town10_test --write-config
+  python -m perception.depth.evaluate --calib data/carla/Town03_clear --test data/carla/Town02_test --write-config
 
 Reports (reports/depth_eval.json):
   * dense metrics vs CARLA ground truth: AbsRel, RMSE, delta<1.25

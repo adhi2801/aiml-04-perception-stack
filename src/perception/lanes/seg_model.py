@@ -1,6 +1,6 @@
 """Learned lane-marking segmentation: LR-ASPP MobileNetV3 (torchvision), trained on CARLA labels.
 
-  python -m perception.lanes.seg_model --train data/carla/Town03_clear data/carla/Town05_rain --val data/carla/Town10_test
+  python -m perception.lanes.seg_model --train data/carla/Town03_clear data/carla/Town03_rain --val data/carla/Town02_test
 
 Real-time-oriented choice: ~3M parameters, exports cleanly to ONNX/TensorRT.
 Lane markings are thin (~1-2% of pixels), so the loss is Dice + positively weighted BCE.

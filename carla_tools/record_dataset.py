@@ -1,7 +1,7 @@
 """Record synthetic sequences with perfect labels: RGB, metric depth, lane-line mask, tracked 2D boxes.
 
   python carla_tools/record_dataset.py --town Town03 --frames 600 --out data/carla/Town03_clear
-  python carla_tools/record_dataset.py --town Town10HD_Opt --frames 600 --weather WetCloudyNoon --out data/carla/Town10_test
+  python carla_tools/record_dataset.py --town Town02_Opt --frames 600 --weather WetCloudySunset --out data/carla/Town02_test
 
 One folder per sequence:
   rgb/000123.jpg  depth/000123.png (uint16 centimetres)  lanes/000123.png (255 = lane marking)  gt.jsonl
@@ -22,14 +22,26 @@ from carla_common import CamSpec, attach_camera, depth_to_meters, get_frame, gt_
 ROAD_LINE_TAG = 24  # CARLA >= 0.9.14 semantic tag for lane markings (it was 6 in older releases)
 
 
-def spawn_traffic(client, world, tm, actors, n_vehicles: int, n_walkers: int, seed: int, near: carla.Location):
-    """Traffic and pedestrians around `near` (the ego), so the camera actually sees them."""
+def ahead_dist(origin: carla.Transform, loc: carla.Location) -> float:
+    """Distance for ordering spawns around the ego: anything behind it counts as 100 m further away."""
+    fwd, to = origin.get_forward_vector(), loc - origin.location
+    return loc.distance(origin.location) + (100.0 if to.x * fwd.x + to.y * fwd.y <= 0 else 0.0)
+
+
+def busiest_spawn(world) -> int:
+    """Index of the spawn point with the most other spawn points within 80 m ahead: a busy street, not a map edge."""
+    sps = world.get_map().get_spawn_points()
+    return int(np.argmax([sum(ahead_dist(sp, o.location) < 80 for o in sps) for sp in sps]))
+
+
+def spawn_traffic(client, world, tm, actors, n_vehicles: int, n_walkers: int, seed: int, near: carla.Transform):
+    """Traffic and pedestrians around `near` (the ego), ahead of it first, so the camera actually sees them."""
     rng = np.random.default_rng(seed)
     bl = world.get_blueprint_library()
-    spawns = sorted(world.get_map().get_spawn_points(), key=lambda sp: sp.location.distance(near))
+    spawns = sorted(world.get_map().get_spawn_points(), key=lambda sp: ahead_dist(near, sp.location))
     vbps = [b for b in bl.filter("vehicle.*") if int(b.get_attribute("number_of_wheels")) == 4]
     batch = [carla.command.SpawnActor(rng.choice(vbps), sp).then(carla.command.SetAutopilot(carla.command.FutureActor, True, tm.get_port()))
-             for sp in spawns[1:n_vehicles + 1] if sp.location.distance(near) > 5]
+             for sp in spawns[:n_vehicles] if sp.location.distance(near.location) > 5]
     for r in client.apply_batch_sync(batch, True):
         if not r.error:
             actors.append(world.get_actor(r.actor_id))
@@ -37,7 +49,7 @@ def spawn_traffic(client, world, tm, actors, n_vehicles: int, n_walkers: int, se
     ctrl_bp = bl.find("controller.ai.walker")
     # sidewalk points sampled map-wide, nearest first: most land within ~150 m of the ego's start
     candidates = [world.get_random_location_from_navigation() for _ in range(n_walkers * 15)]
-    candidates = sorted((c for c in candidates if c is not None), key=lambda c: c.distance(near))
+    candidates = sorted((c for c in candidates if c is not None), key=lambda c: ahead_dist(near, c))
     for loc in candidates[:n_walkers]:
         w = world.try_spawn_actor(rng.choice(walker_bps), carla.Transform(loc))
         if w is None:
@@ -63,6 +75,7 @@ def main() -> None:
     ap.add_argument("--vehicles", type=int, default=40)
     ap.add_argument("--walkers", type=int, default=60)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--spawn", type=int, default=-1, help="ego spawn point index; -1 = busiest street ahead")
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720, help="use 800x450 with configs/pipeline_lowvram.yaml")
     ap.add_argument("--out", type=Path, required=True)
@@ -75,12 +88,15 @@ def main() -> None:
     spec = CamSpec(args.width, args.height)
     with sync_world(client, fps=20, town=args.town) as (world, tm, actors):
         world.set_weather(getattr(carla.WeatherParameters, args.weather))
-        ego = spawn_ego(world, actors, spawn_index=0)
+        spawn = busiest_spawn(world) if args.spawn < 0 else args.spawn
+        ego = spawn_ego(world, actors, spawn_index=spawn)
         rgb_cam, rgb_q = attach_camera(world, actors, ego, spec, "rgb")
         _, depth_q = attach_camera(world, actors, ego, spec, "depth")
         _, seg_q = attach_camera(world, actors, ego, spec, "semantic")
 
-        spawn_traffic(client, world, tm, actors, args.vehicles, args.walkers, args.seed, ego.get_location())
+        # the spawn point, not ego.get_transform(): in sync mode a new actor reports (0, 0, 0) until the next tick
+        start = world.get_map().get_spawn_points()[spawn]
+        spawn_traffic(client, world, tm, actors, args.vehicles, args.walkers, args.seed, start)
         ego.set_autopilot(True, tm.get_port())
         tm.ignore_lights_percentage(ego, 100)  # keep moving: frames parked at a red light add little
         for _ in range(40):  # let traffic settle
@@ -110,7 +126,7 @@ def main() -> None:
                 saved += 1
                 if saved % 100 == 0:
                     print(f"{saved}/{args.frames}")
-    meta = {"town": args.town, "weather": args.weather, "frames": saved, "camera": vars(spec), "fps": 20 / args.every}
+    meta = {"town": args.town, "weather": args.weather, "frames": saved, "ego_spawn": spawn, "camera": vars(spec), "fps": 20 / args.every}
     (args.out / "meta.json").write_text(json.dumps(meta, indent=2))
 
 
