@@ -1,0 +1,35 @@
+{
+  "weights": "models/lane_lraspp.pt",
+  "selection": {
+    "threshold": 0.6,
+    "epoch": 14,
+    "val_pixel_f1": 0.7375,
+    "train": [
+      "Town01_sunset",
+      "Town03_clear",
+      "Town03_rain",
+      "Town04_cloudy",
+      "Town05_wet"
+    ],
+    "val": "last 15% of each training sequence"
+  },
+  "tol_px": 5,
+  "sequences": {
+    "Town02_test": {
+      "town": "Town02_Opt",
+      "weather": "WetCloudySunset",
+      "classical": {
+        "precision": 0.0889,
+        "recall": 0.4316,
+        "f1": 0.1475,
+        "latency_ms_p50": 12.59
+      },
+      "learned": {
+        "precision": 0.9563,
+        "recall": 0.8215,
+        "f1": 0.8838,
+        "latency_ms_p50": 21.49
+      }
+    }
+  }
+}

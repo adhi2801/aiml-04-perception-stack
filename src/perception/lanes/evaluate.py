@@ -70,7 +70,10 @@ def main() -> None:
         results[seq.name] = {"town": meta["town"], "weather": meta["weather"], **evaluate(seq, classical, learned, args.tol)}
         print(seq.name, json.dumps(results[seq.name]))
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps({"weights": str(args.weights), "tol_px": args.tol, "sequences": results}, indent=2))
+    sidecar = Path(args.weights).with_suffix(".json")  # how the checkpoint and threshold were selected
+    selection = json.loads(sidecar.read_text()) if sidecar.exists() else None
+    args.out.write_text(json.dumps({"weights": str(args.weights), "selection": selection, "tol_px": args.tol,
+                                    "sequences": results}, indent=2))
 
 
 if __name__ == "__main__":

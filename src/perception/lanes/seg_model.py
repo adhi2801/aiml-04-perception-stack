@@ -129,7 +129,8 @@ def main() -> None:
     val_sets = [LaneFrames(d, False) for d in args.val] if args.val else         [LaneFrames(d, False, "val", args.val_frac) for d in args.train]
     train = DataLoader(ConcatDataset([LaneFrames(d, True, train_part, args.val_frac) for d in args.train]), args.batch,
                        shuffle=True, num_workers=4, drop_last=True, persistent_workers=True)
-    val = DataLoader(ConcatDataset(val_sets), args.batch, num_workers=4, persistent_workers=True)
+    # validation runs for seconds per epoch: 2 workers, not kept alive (4 persistent ones held ~4 GB of commit)
+    val = DataLoader(ConcatDataset(val_sets), args.batch, num_workers=2)
     model = build().to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs)
