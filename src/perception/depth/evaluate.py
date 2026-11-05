@@ -89,8 +89,7 @@ def main() -> None:
     if args.write_config:
         text = Path(args.config).read_text()
         text = text.replace("scale: null", f"scale: {scale:.8g}").replace("shift: null", f"shift: {shift:.8g}")
-        Path(args.config).write_text(text, newline="
-")  # keep LF on Windows
+        Path(args.config).write_text(text, newline="\n")  # keep LF on Windows
 
 
 if __name__ == "__main__":
