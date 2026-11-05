@@ -1,0 +1,26 @@
+{
+  "Town02_test": {
+    "mota": 0.36446360153256707,
+    "motp": 0.2604036115550841,
+    "idf1": 0.5698795180722892,
+    "num_switches": 35.0,
+    "mostly_tracked": 8.0,
+    "mostly_lost": 25.0,
+    "num_false_positives": 218.0,
+    "num_misses": 1074.0,
+    "precision": 0.823051948051948,
+    "recall": 0.48563218390804597
+  },
+  "OVERALL": {
+    "mota": 0.36446360153256707,
+    "motp": 0.2604036115550841,
+    "idf1": 0.5698795180722892,
+    "num_switches": 35.0,
+    "mostly_tracked": 8.0,
+    "mostly_lost": 25.0,
+    "num_false_positives": 218.0,
+    "num_misses": 1074.0,
+    "precision": 0.823051948051948,
+    "recall": 0.48563218390804597
+  }
+}
