@@ -57,6 +57,7 @@ def main() -> None:
     ap.add_argument("--weights", default="models/lane_lraspp.pt")
     ap.add_argument("--config", default="configs/pipeline.yaml")
     ap.add_argument("--tol", type=int, default=5)
+    ap.add_argument("--out", type=Path, default=Path("reports/lanes_comparison.json"))
     args = ap.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).read_text())
@@ -68,8 +69,8 @@ def main() -> None:
                                           cfg["lanes"]["smoothing"])
         results[seq.name] = {"town": meta["town"], "weather": meta["weather"], **evaluate(seq, classical, learned, args.tol)}
         print(seq.name, json.dumps(results[seq.name]))
-    Path("reports").mkdir(exist_ok=True)
-    Path("reports/lanes_comparison.json").write_text(json.dumps(results, indent=2))
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps({"weights": str(args.weights), "tol_px": args.tol, "sequences": results}, indent=2))
 
 
 if __name__ == "__main__":
