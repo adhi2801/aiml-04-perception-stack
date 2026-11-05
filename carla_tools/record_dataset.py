@@ -22,23 +22,23 @@ from carla_common import CamSpec, attach_camera, depth_to_meters, get_frame, gt_
 ROAD_LINE_TAG = 24  # CARLA >= 0.9.14 semantic tag for lane markings (it was 6 in older releases)
 
 
-def spawn_traffic(client, world, tm, actors, n_vehicles: int, n_walkers: int, seed: int):
+def spawn_traffic(client, world, tm, actors, n_vehicles: int, n_walkers: int, seed: int, near: carla.Location):
+    """Traffic and pedestrians around `near` (the ego), so the camera actually sees them."""
     rng = np.random.default_rng(seed)
     bl = world.get_blueprint_library()
-    spawns = world.get_map().get_spawn_points()
-    rng.shuffle(spawns)
+    spawns = sorted(world.get_map().get_spawn_points(), key=lambda sp: sp.location.distance(near))
     vbps = [b for b in bl.filter("vehicle.*") if int(b.get_attribute("number_of_wheels")) == 4]
     batch = [carla.command.SpawnActor(rng.choice(vbps), sp).then(carla.command.SetAutopilot(carla.command.FutureActor, True, tm.get_port()))
-             for sp in spawns[1:n_vehicles + 1]]
+             for sp in spawns[1:n_vehicles + 1] if sp.location.distance(near) > 5]
     for r in client.apply_batch_sync(batch, True):
         if not r.error:
             actors.append(world.get_actor(r.actor_id))
     walker_bps = bl.filter("walker.pedestrian.*")
     ctrl_bp = bl.find("controller.ai.walker")
-    for _ in range(n_walkers):
-        loc = world.get_random_location_from_navigation()
-        if loc is None:
-            continue
+    # sidewalk points sampled map-wide, nearest first: most land within ~150 m of the ego's start
+    candidates = [world.get_random_location_from_navigation() for _ in range(n_walkers * 15)]
+    candidates = sorted((c for c in candidates if c is not None), key=lambda c: c.distance(near))
+    for loc in candidates[:n_walkers]:
         w = world.try_spawn_actor(rng.choice(walker_bps), carla.Transform(loc))
         if w is None:
             continue
@@ -80,8 +80,9 @@ def main() -> None:
         _, depth_q = attach_camera(world, actors, ego, spec, "depth")
         _, seg_q = attach_camera(world, actors, ego, spec, "semantic")
 
-        spawn_traffic(client, world, tm, actors, args.vehicles, args.walkers, args.seed)
+        spawn_traffic(client, world, tm, actors, args.vehicles, args.walkers, args.seed, ego.get_location())
         ego.set_autopilot(True, tm.get_port())
+        tm.ignore_lights_percentage(ego, 100)  # keep moving: frames parked at a red light add little
         for _ in range(40):  # let traffic settle
             f = world.tick()
             for q in (rgb_q, depth_q, seg_q):
