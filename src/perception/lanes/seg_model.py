@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 
 import cv2
@@ -41,8 +42,22 @@ class LaneFrames(Dataset):
         if self.train:
             if np.random.rand() < 0.5:  # lanes are left/right symmetric, unlike chest X-rays
                 img, mask = img[:, ::-1], mask[:, ::-1]
+            img = colour_jitter(img)
             img = np.clip(img.astype(np.float32) * np.random.uniform(0.6, 1.4) + np.random.uniform(-25, 25), 0, 255)
         return to_tensor(img), torch.from_numpy((mask > 127).astype(np.float32))[None]
+
+
+def colour_jitter(bgr: np.ndarray) -> np.ndarray:
+    """Hue rotation or grayscale, so paint colour is not a shortcut: Town03 lane paint is 0 % yellow,
+    Town02 (the test town) 61 %, and a brightness-only model scored val F1 0.001 there."""
+    r = np.random.rand()
+    if r < 0.4:
+        hsv = cv2.cvtColor(np.ascontiguousarray(bgr), cv2.COLOR_BGR2HSV)
+        hsv[..., 0] = (hsv[..., 0].astype(np.int16) + np.random.randint(0, 180)) % 180
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    if r < 0.65:
+        return cv2.cvtColor(cv2.cvtColor(np.ascontiguousarray(bgr), cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
+    return bgr
 
 
 def to_tensor(bgr: np.ndarray) -> torch.Tensor:
@@ -92,8 +107,12 @@ def main() -> None:
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train = DataLoader(ConcatDataset([LaneFrames(d, True) for d in args.train]), args.batch, shuffle=True, num_workers=4, drop_last=True)
-    val = DataLoader(ConcatDataset([LaneFrames(d, False) for d in args.val]), args.batch, num_workers=4)
+    torch.backends.cudnn.benchmark = True  # fixed input size
+    # persistent workers: on Windows every epoch would otherwise re-spawn 4 processes that each re-import torch
+    train = DataLoader(ConcatDataset([LaneFrames(d, True) for d in args.train]), args.batch, shuffle=True, num_workers=4,
+                       drop_last=True, persistent_workers=True)
+    val = DataLoader(ConcatDataset([LaneFrames(d, False) for d in args.val]), args.batch, num_workers=4,
+                     persistent_workers=True)
     model = build().to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs)
@@ -106,6 +125,7 @@ def main() -> None:
     best = -1.0
     args.out.parent.mkdir(parents=True, exist_ok=True)
     for epoch in range(args.epochs):
+        t0 = time.time()
         model.train()
         for x, y in train:
             x, y = x.to(device), y.to(device)
@@ -126,7 +146,7 @@ def main() -> None:
                 fp += (pred & ~y).sum().item()
                 fn += (~pred & y).sum().item()
         f1 = 2 * tp / max(2 * tp + fp + fn, 1)
-        rec = {"epoch": epoch, "loss": loss.item(), "val_pixel_f1": round(f1, 4)}
+        rec = {"epoch": epoch, "loss": loss.item(), "val_pixel_f1": round(f1, 4), "epoch_sec": round(time.time() - t0, 1)}
         print(json.dumps(rec))
         if run:
             run.log(rec)
