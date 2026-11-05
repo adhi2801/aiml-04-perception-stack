@@ -43,7 +43,7 @@ def main() -> None:
 
     cfg = yaml.safe_load(Path(args.config).read_text())
     cam = cfg["camera"]
-    midas = MiDaS(cfg["depth"]["model"])
+    midas = MiDaS(cfg["depth"]["model"], device=cfg["depth"].get("device"))
 
     # 1) Calibration: pool sub-sampled pixels from the calibration sequences.
     xs, ys = [], []
@@ -89,7 +89,8 @@ def main() -> None:
     if args.write_config:
         text = Path(args.config).read_text()
         text = text.replace("scale: null", f"scale: {scale:.8g}").replace("shift: null", f"shift: {shift:.8g}")
-        Path(args.config).write_text(text)
+        Path(args.config).write_text(text, newline="
+")  # keep LF on Windows
 
 
 if __name__ == "__main__":

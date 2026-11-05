@@ -17,11 +17,12 @@ detector:
 tracker: bytetrack.yaml        # ultralytics built-in ByteTrack config
 
 depth:
+  source: ground_plane         # ground_plane | midas (see reports/depth_eval.json)
   model: MiDaS_small           # MiDaS_small (fast) | DPT_Hybrid (accurate)
   device: cpu
   # metric depth z = 1 / (scale * inv_rel + shift); fit with `python -m perception.depth.evaluate --write-config`
-  scale: null
-  shift: null
+  scale: 0.00055159075
+  shift: 0.014412377
 
 lanes:
   # bird's-eye-view source trapezoid as fractions of (width, height): bottom-left, top-left, top-right, bottom-right

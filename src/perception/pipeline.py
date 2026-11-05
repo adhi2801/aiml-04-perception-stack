@@ -51,8 +51,11 @@ class PerceptionPipeline:
         self.lanes = ClassicalLaneDetector(self.w, self.h, self.cfg["lanes"]["src"], self.cfg["lanes"]["smoothing"])
         self.aeb = AEB(AEBConfig.from_dict(self.cfg["aeb"]))
         dcfg = self.cfg["depth"]
+        # ground_plane: box bottom + camera height (measured 4-7 % median error on CARLA vs 18-62 % for calibrated
+        # MiDaS_small, reports/depth_eval.json); midas: dense monocular depth for non-flat scenes
+        self.depth_source = dcfg.get("source", "midas")
         self.depth_model = None
-        if use_depth_model:
+        if use_depth_model and self.depth_source == "midas":
             from perception.depth.midas import MiDaS
             self.depth_model = MiDaS(dcfg["model"], device=dcfg.get("device"))
         self.depth_scale, self.depth_shift = dcfg.get("scale"), dcfg.get("shift")
@@ -71,7 +74,7 @@ class PerceptionPipeline:
         depth_m = None
         if gt_depth is not None:
             depth_m = gt_depth  # oracle mode: isolates detection/AEB errors from depth errors
-        elif self.depth_model is not None and self.depth_scale is not None:
+        elif self.depth_source == "midas" and self.depth_model is not None and self.depth_scale is not None:
             depth_m = to_metric(self.depth_model(bgr), self.depth_scale, self.depth_shift)
         timings["depth"] = (time.perf_counter() - t0) * 1000
 
