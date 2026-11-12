@@ -1,0 +1,11 @@
+{
+  "split": "val (held-out tail of each training town; used for best-epoch selection)",
+  "map50_95": 0.7395,
+  "map50": 0.8652,
+  "per_class_map50_95": {
+    "pedestrian": 0.2503,
+    "car": 0.8695,
+    "truck": 0.8433,
+    "bus": 0.995
+  }
+}

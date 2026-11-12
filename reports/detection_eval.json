@@ -1,0 +1,129 @@
+{
+  "sequence": "Town02_test",
+  "town": "Town02_Opt",
+  "weather": "WetCloudySunset",
+  "frames": 600,
+  "classes": [
+    "pedestrian",
+    "vehicle"
+  ],
+  "min_height_px": 6,
+  "models": {
+    "coco": {
+      "weights": "yolo11s.pt",
+      "map50_95": 0.2166,
+      "map50_95_ci95": [
+        0.205,
+        0.2302
+      ],
+      "map50": 0.5111,
+      "map50_ci95": [
+        0.4899,
+        0.5311
+      ],
+      "per_class_map50_95": {
+        "pedestrian": 0.1839,
+        "vehicle": 0.2493
+      },
+      "operating_conf": 0.3,
+      "recall_by_distance": {
+        "pedestrian": {
+          "0-15m": {
+            "recall": 0.832,
+            "n": 375
+          },
+          "15-30m": {
+            "recall": 0.528,
+            "n": 705
+          },
+          "30-50m": {
+            "recall": 0.084,
+            "n": 592
+          },
+          "50m+": {
+            "recall": 0.0,
+            "n": 24
+          }
+        },
+        "vehicle": {
+          "0-15m": {
+            "recall": 0.804,
+            "n": 372
+          },
+          "15-30m": {
+            "recall": 0.6,
+            "n": 350
+          },
+          "30-50m": {
+            "recall": 0.465,
+            "n": 346
+          },
+          "50m+": {
+            "recall": 0.237,
+            "n": 93
+          }
+        }
+      }
+    },
+    "carla": {
+      "weights": "models/yolo11s_carla.pt",
+      "map50_95": 0.3393,
+      "map50_95_ci95": [
+        0.324,
+        0.3546
+      ],
+      "map50": 0.5993,
+      "map50_ci95": [
+        0.5752,
+        0.6225
+      ],
+      "per_class_map50_95": {
+        "pedestrian": 0.2446,
+        "vehicle": 0.434
+      },
+      "operating_conf": 0.3,
+      "recall_by_distance": {
+        "pedestrian": {
+          "0-15m": {
+            "recall": 0.773,
+            "n": 375
+          },
+          "15-30m": {
+            "recall": 0.407,
+            "n": 705
+          },
+          "30-50m": {
+            "recall": 0.019,
+            "n": 592
+          },
+          "50m+": {
+            "recall": 0.0,
+            "n": 24
+          }
+        },
+        "vehicle": {
+          "0-15m": {
+            "recall": 0.884,
+            "n": 372
+          },
+          "15-30m": {
+            "recall": 0.689,
+            "n": 350
+          },
+          "30-50m": {
+            "recall": 0.413,
+            "n": 346
+          },
+          "50m+": {
+            "recall": 0.022,
+            "n": 93
+          }
+        }
+      }
+    }
+  },
+  "gt_objects": {
+    "pedestrian": 1696,
+    "vehicle": 1161
+  }
+}
