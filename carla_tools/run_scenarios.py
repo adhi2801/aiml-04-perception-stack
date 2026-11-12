@@ -47,14 +47,37 @@ def front_gap(ego, point: carla.Location) -> float:
     return (point.x - e.x) * f.x + (point.y - e.y) * f.y - ego.bounding_box.extent.x
 
 
-def setup_hazard(world, actors, ego, scenario: str, rng: random.Random, tm=None, test_kmh: float | None = None):
-    """Returns (hazard actor, per-tick function that drives it). `tm`/`test_kmh` are only needed for CCRb."""
-    s = sc.get(scenario)
+def set_conditions(world, ego, sun_altitude_deg: float = 45.0, rain: float = 0.0) -> None:
+    """Time of day and rain for one trial. Below the horizon the ego drives on its headlights."""
+    world.set_weather(carla.WeatherParameters(
+        sun_altitude_angle=sun_altitude_deg, sun_azimuth_angle=90.0, cloudiness=max(rain, 10.0),
+        precipitation=rain, precipitation_deposits=rain, wetness=rain, fog_density=0.0))
+    lights = carla.VehicleLightState.Position
+    if sun_altitude_deg < 5:
+        lights |= carla.VehicleLightState.LowBeam
+    ego.set_light_state(carla.VehicleLightState(lights))
+
+
+def setup_hazard(world, actors, ego, scenario, rng: random.Random, tm=None, test_kmh: float | None = None,
+                 occluded: bool = False):
+    """Returns (hazard actor, per-tick function that drives it). `scenario` is a name or a sc.Scenario.
+    `tm`/`test_kmh` are only needed for CCRb. `occluded` parks a van at the kerb just before the crossing point, so
+    the pedestrian is hidden from the camera until they step out (Euro NCAP's obstructed CPNC variant)."""
+    s = scenario if isinstance(scenario, sc.Scenario) else sc.get(scenario)
     wp = world.get_map().get_waypoint(ego.get_location())
     bl = world.get_blueprint_library()
     if s.kind == "pedestrian":
         # Far enough ahead for the ego to settle at the test speed before the pedestrian is released.
         hazard_wp = wp.next(110.0)[0]
+        if occluded:
+            lane_half = hazard_wp.lane_width / 2
+            van_tf = carla.Transform(ahead(hazard_wp.transform, -5.0, s.side * (lane_half + 1.2)),
+                                     hazard_wp.transform.rotation)
+            van = world.try_spawn_actor(bl.find("vehicle.mercedes.sprinter"), van_tf) or \
+                world.try_spawn_actor(bl.find("vehicle.audi.a2"), van_tf)
+            if van is not None:
+                van.set_simulate_physics(False)
+                actors.append(van)
         walker = world.spawn_actor(rng.choice(bl.filter("walker.pedestrian.*")),
                                    carla.Transform(ahead(hazard_wp.transform, 0, s.side * s.start_offset_m)))
         actors.append(walker)
@@ -96,11 +119,16 @@ def setup_hazard(world, actors, ego, scenario: str, rng: random.Random, tm=None,
     return lead, tick
 
 
-def run_trial(client, pipe: PerceptionPipeline, args, trial: int, test_kmh: float, writer) -> dict:
+def run_trial(client, pipe: PerceptionPipeline, args, trial: int, test_kmh: float, writer,
+              scenario=None, conditions: dict | None = None, occluded: bool = False) -> dict:
+    """One closed-loop trial. `scenario` (name or sc.Scenario) defaults to args.scenario; `conditions` are
+    set_conditions() keyword arguments (default: clear noon)."""
     rng = random.Random(trial)
     spec = CamSpec(pipe.w, pipe.h, pipe.fov, z=pipe.cam_h)
+    scenario = scenario if scenario is not None else args.scenario
     with sync_world(client, fps=args.fps) as (world, tm, actors):
         ego = spawn_ego(world, actors, spawn_index=args.spawn + trial % 5)
+        set_conditions(world, ego, **(conditions or {}))
         rgb_cam, rgb_q = attach_camera(world, actors, ego, spec, "rgb")
         _, depth_q = attach_camera(world, actors, ego, spec, "depth")
         collisions = attach_collision(world, actors, ego)
@@ -110,7 +138,7 @@ def run_trial(client, pipe: PerceptionPipeline, args, trial: int, test_kmh: floa
         tm.ignore_lights_percentage(ego, 100)
         tm.set_desired_speed(ego, test_kmh)
         world.tick()
-        hazard, hazard_tick = setup_hazard(world, actors, ego, args.scenario, rng, tm, test_kmh)
+        hazard, hazard_tick = setup_hazard(world, actors, ego, scenario, rng, tm, test_kmh, occluded=occluded)
         pipe.aeb.__post_init__()  # reset track history between trials
         pipe.model.predictor = None  # reset ByteTrack state
 
