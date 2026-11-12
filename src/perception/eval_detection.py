@@ -89,13 +89,18 @@ def map_from_frames(frames: list[dict]) -> tuple[float, float, dict]:
     return float(stack.mean()), float(stack[:, 0].mean()), {k: float(v.mean()) for k, v in aps.items()}
 
 
-def predict_sequence(seq: Path, weights: str, imgsz: int, min_height: int, op_conf: float) -> list[dict]:
+def predict_sequence(seq: Path, weights: str, imgsz: int, min_height: int, op_conf: float,
+                     val_tail: float | None = None, model=None) -> list[dict]:
+    """val_tail: only the last fraction of the sequence (the validation frames carla_to_yolo held out)."""
     import cv2
     from ultralytics import YOLO
 
-    model = YOLO(weights, task="detect")
+    model = model or YOLO(weights, task="detect")
     frames = []
-    for line in (seq / "gt.jsonl").read_text().splitlines():
+    lines = (seq / "gt.jsonl").read_text().splitlines()
+    if val_tail:
+        lines = lines[int(len(lines) * (1 - val_tail)):]
+    for line in lines:
         g = json.loads(line)
         objs = [o for o in g["objects"] if o["cls"] in EVAL and o["box"][3] - o["box"][1] >= min_height]
         gb = np.array([o["box"] for o in objs], float).reshape(-1, 4)
@@ -117,7 +122,13 @@ def predict_sequence(seq: Path, weights: str, imgsz: int, min_height: int, op_co
             iou = box_iou(gb, pb[sel])
             same = gc[:, None] == pc[sel][None, :]
             hit = ((iou >= 0.5) & same).any(1)
-        frames.append({"tp": tp, "ps": ps, "pc": pc, "gc": gc, "gd": gd, "hit": hit})
+        # highest confidence of a same-class detection with IoU >= 0.5 per GT object (0 if none): recall at any
+        # confidence c is mean(best_conf >= c), which is what choosing an operating point needs
+        best_conf = np.zeros(len(gb))
+        if len(pb) and len(gb):
+            ok = (box_iou(gb, pb) >= 0.5) & (gc[:, None] == pc[None, :])
+            best_conf = np.where(ok, ps[None, :], 0.0).max(1)
+        frames.append({"tp": tp, "ps": ps, "pc": pc, "gc": gc, "gd": gd, "hit": hit, "best_conf": best_conf})
     return frames
 
 
@@ -142,25 +153,81 @@ def summarize(frames: list[dict], n_boot: int, seed: int, op_conf: float) -> dic
             "operating_conf": op_conf, "recall_by_distance": recall}
 
 
+def pick_conf(frames: list[dict], target_recall: float, max_dist: float, cls: str = "pedestrian") -> dict:
+    """Highest confidence whose recall (IoU >= 0.5) on `cls` objects closer than `max_dist` m reaches the target:
+    the strictest threshold (fewest false alarms) that still sees enough pedestrians in AEB range. Also returns the
+    false detections per frame at that threshold, the price of the choice."""
+    c = CLASSES.index(cls)
+    best = np.concatenate([f["best_conf"][(f["gc"] == c) & (f["gd"] < max_dist)] for f in frames])
+    grid = np.round(np.arange(0.05, 0.951, 0.01), 2)
+    recall = np.array([(best >= g).mean() if len(best) else np.nan for g in grid])
+    ok = np.where(recall >= target_recall)[0]
+    conf = float(grid[ok[-1]]) if len(ok) else float(grid[0])
+    fp = np.mean([int(((f["ps"] >= conf) & ~f["tp"][:, 0]).sum()) for f in frames])
+    return {"conf": conf, "recall_at_conf": round(float((best >= conf).mean()), 3), "target_recall": target_recall,
+            "max_dist_m": max_dist, "n_objects": int(len(best)), "false_detections_per_frame": round(float(fp), 2),
+            "reached_target": bool(len(ok))}
+
+
+def choose_operating_points(args) -> None:
+    """Pick each detector's operating confidence on the VALIDATION frames (last --val-tail of every training
+    sequence, the frames carla_to_yolo held out), never on the test town; writes reports/operating_points.json.
+
+      python -m perception.eval_detection --pick-conf --model coco=yolo11s.pt --model carla=models/yolo11s_carla.pt \
+          --seq data/carla/Town01_sunset --seq data/carla/Town03_clear ... --target-recall 0.85
+    """
+    from ultralytics import YOLO
+
+    if any("Town02" in s.name for s in args.seq):
+        raise SystemExit("Town02 is the test town: operating points must be chosen on training-town validation frames")
+    out = {"split": f"validation: last {args.val_tail:.0%} of each training sequence",
+           "sequences": [s.name for s in args.seq], "models": {}}
+    for spec in args.model:
+        label, weights = spec.split("=", 1)
+        model = YOLO(weights, task="detect")
+        frames = [f for s in args.seq for f in predict_sequence(s, weights, args.imgsz, args.min_height, args.conf,
+                                                                val_tail=args.val_tail, model=model)]
+        out["models"][label] = {"weights": weights, **pick_conf(frames, args.target_recall, args.max_dist)}
+        print(label, out["models"][label])
+    path = Path("reports") / "operating_points.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps(out, indent=2))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--seq", type=Path, required=True)
+    ap.add_argument("--seq", type=Path, action="append", required=True,
+                    help="sequence folder; repeatable only with --pick-conf")
     ap.add_argument("--model", action="append", required=True, help="label=weights, repeatable")
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--min-height", type=int, default=6, help="same speck filter as carla_to_yolo")
     ap.add_argument("--conf", type=float, default=0.3, help="operating confidence of the pipeline")
+    ap.add_argument("--operating-points", type=Path, default=None,
+                    help="reports/operating_points.json: per-model confidence chosen on validation (overrides --conf)")
     ap.add_argument("--boot", type=int, default=500)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("reports/detection_eval.json"))
+    ap.add_argument("--pick-conf", action="store_true", help="choose operating confidences on validation frames")
+    ap.add_argument("--val-tail", type=float, default=0.15)
+    ap.add_argument("--target-recall", type=float, default=0.85)
+    ap.add_argument("--max-dist", type=float, default=30.0, help="pedestrians closer than this count for the target")
     args = ap.parse_args()
+    if args.pick_conf:
+        return choose_operating_points(args)
+    if len(args.seq) != 1:
+        ap.error("scoring takes exactly one --seq (the test town)")
+    args.seq = args.seq[0]
+    op = json.loads(args.operating_points.read_text())["models"] if args.operating_points else {}
 
     meta = json.loads((args.seq / "meta.json").read_text())
     result = {"sequence": args.seq.name, "town": meta["town"], "weather": meta["weather"],
               "frames": meta["frames"], "classes": CLASSES, "min_height_px": args.min_height, "models": {}}
     for spec in args.model:
         label, weights = spec.split("=", 1)
-        frames = predict_sequence(args.seq, weights, args.imgsz, args.min_height, args.conf)
-        result["models"][label] = {"weights": weights, **summarize(frames, args.boot, args.seed, args.conf)}
+        conf = op[label]["conf"] if label in op else args.conf
+        frames = predict_sequence(args.seq, weights, args.imgsz, args.min_height, conf)
+        result["models"][label] = {"weights": weights, **summarize(frames, args.boot, args.seed, conf),
+                                   "operating_conf_source": "validation" if label in op else "fixed"}
         print(label, json.dumps(result["models"][label]))
     result["gt_objects"] = {c: int(sum((f["gc"] == i).sum() for f in frames)) for i, c in enumerate(CLASSES)}
     args.out.parent.mkdir(parents=True, exist_ok=True)

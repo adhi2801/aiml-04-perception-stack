@@ -45,3 +45,18 @@ def test_missing_half_the_objects_halves_ap():
 def test_loose_box_matches_at_050_not_at_095():
     f = frame([[0, 0, 10, 12]], [0], [0.9], [[0, 0, 10, 10]], [0])  # IoU = 0.833
     assert f["tp"][0, 0] and not f["tp"][0, -1]
+
+
+def test_pick_conf_is_the_strictest_threshold_reaching_target_recall():
+    from perception.eval_detection import pick_conf
+
+    # 10 pedestrians within 30 m whose best matching detection scores are 0.1 .. 1.0, plus one far one (ignored)
+    gc = np.zeros(11, int)
+    gd = np.array([10.0] * 10 + [60.0])
+    best = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0])
+    f = {"gc": gc, "gd": gd, "best_conf": best, "ps": np.array([0.95, 0.4]),
+         "tp": np.array([[True] * 10, [False] * 10])}
+    out = pick_conf([f], target_recall=0.8, max_dist=30)
+    assert out["n_objects"] == 10 and out["reached_target"]
+    assert out["conf"] == 0.3 and out["recall_at_conf"] == 0.8      # 0.3 keeps 8 of 10; 0.31 would keep 7
+    assert out["false_detections_per_frame"] == 1.0                  # the 0.4 detection is a false positive
