@@ -23,8 +23,11 @@ class LaneResult:
 
 class ClassicalLaneDetector:
     def __init__(self, width: int, height: int, src_frac: list[list[float]], smoothing: float = 0.7,
-                 n_windows: int = 9, margin: int = 80, min_pix: int = 40):
+                 n_windows: int = 9, margin: int = 80, min_pix: int = 40, mask_fn=None):
+        """mask_fn(bgr) -> uint8 lane-pixel mask replaces the hand-tuned colour/edge threshold (step 1), e.g. the
+        learned LaneSegmenter; the bird's-eye fit, sanity check, smoothing and ego corridor stay the same."""
         self.w, self.h = width, height
+        self.mask_fn = mask_fn
         src = np.float32([[x * width, y * height] for x, y in src_frac])
         dst = np.float32([[0.25 * width, height], [0.25 * width, 0], [0.75 * width, 0], [0.75 * width, height]])
         self.M = cv2.getPerspectiveTransform(src, dst)
@@ -73,7 +76,7 @@ class ClassicalLaneDetector:
 
     # ---- 3. full frame ----
     def __call__(self, bgr: np.ndarray) -> LaneResult:
-        binary = self.threshold(bgr)
+        binary = self.mask_fn(bgr) if self.mask_fn is not None else self.threshold(bgr)
         warped = cv2.warpPerspective(binary, self.M, (self.w, self.h), flags=cv2.INTER_NEAREST)
         left, right = self._search(warped)
 

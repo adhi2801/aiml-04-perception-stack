@@ -22,6 +22,8 @@ depth:
   shift: null
 
 lanes:
+  source: learned              # learned (LR-ASPP mask, falls back to classical if weights are missing) | classical
+  weights: models/lane_lraspp.pt
   # bird's-eye-view source trapezoid as fractions of (width, height): bottom-left, top-left, top-right, bottom-right
   src: [[0.16, 0.95], [0.44, 0.63], [0.56, 0.63], [0.86, 0.95]]
   smoothing: 0.7               # EMA weight on previous polynomial (temporal stability)

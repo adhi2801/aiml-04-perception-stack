@@ -1,0 +1,47 @@
+import numpy as np
+
+from perception.eval_detection import average_precision, box_iou, map_from_frames, match_frame
+
+
+def frame(pb, pc, ps, gb, gc):
+    pb, gb = np.array(pb, float).reshape(-1, 4), np.array(gb, float).reshape(-1, 4)
+    pc, ps, gc = np.array(pc, int), np.array(ps, float), np.array(gc, int)
+    return {"tp": match_frame(pb, pc, ps, gb, gc), "ps": ps, "pc": pc, "gc": gc}
+
+
+def test_iou_identity_and_disjoint():
+    a = np.array([[0, 0, 10, 10]], float)
+    assert np.isclose(box_iou(a, a)[0, 0], 1.0)
+    assert box_iou(a, np.array([[20, 20, 30, 30]], float))[0, 0] == 0.0
+
+
+def test_perfect_detections_score_one():
+    f = frame([[0, 0, 10, 10], [50, 50, 80, 90]], [0, 1], [0.9, 0.8], [[0, 0, 10, 10], [50, 50, 80, 90]], [0, 1])
+    m, m50, per = map_from_frames([f])
+    assert np.isclose(m, 1.0) and np.isclose(m50, 1.0)
+
+
+def test_low_confidence_false_positive_does_not_hurt_ap():
+    # A false positive ranked below the true positive leaves precision at recall 1.0 unchanged.
+    f = frame([[0, 0, 10, 10], [100, 100, 120, 120]], [0, 0], [0.9, 0.1], [[0, 0, 10, 10]], [0])
+    assert np.isclose(map_from_frames([f])[1], 1.0)
+
+
+def test_wrong_class_is_not_a_match():
+    f = frame([[0, 0, 10, 10]], [1], [0.9], [[0, 0, 10, 10]], [0])
+    assert f["tp"].sum() == 0
+
+
+def test_duplicate_detection_counts_once():
+    f = frame([[0, 0, 10, 10], [0, 0, 10, 10]], [0, 0], [0.9, 0.8], [[0, 0, 10, 10]], [0])
+    assert f["tp"][:, 0].tolist() == [True, False]
+
+
+def test_missing_half_the_objects_halves_ap():
+    ap = average_precision(np.ones((1, 10), bool), np.array([0.9]), n_gt=2)
+    assert np.allclose(ap, 51 / 101)  # recall reaches 0.5: 51 of 101 recall points have precision 1
+
+
+def test_loose_box_matches_at_050_not_at_095():
+    f = frame([[0, 0, 10, 12]], [0], [0.9], [[0, 0, 10, 10]], [0])  # IoU = 0.833
+    assert f["tp"][0, 0] and not f["tp"][0, -1]

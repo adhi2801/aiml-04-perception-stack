@@ -70,8 +70,10 @@ def main() -> None:
     print(mm.io.render_summary(summary, namemap=mm.io.motchallenge_metric_names))
     Path("reports").mkdir(exist_ok=True)
     out = Path("reports") / f"tracking_{Path(args.tracker).stem}.json"
-    out.write_text(json.dumps({k: {m: (None if np.isnan(v) else float(v)) for m, v in row.items()}
-                               for k, row in summary.to_dict(orient="index").items()}, indent=2))
+    result = {k: {m: (None if np.isnan(v) else float(v)) for m, v in row.items()}
+              for k, row in summary.to_dict(orient="index").items()}
+    result["_meta"] = {"weights": args.weights, "tracker": args.tracker, "conf": args.conf, "min_height": args.min_height}
+    out.write_text(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

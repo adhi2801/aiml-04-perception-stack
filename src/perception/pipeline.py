@@ -39,16 +39,27 @@ class FrameResult:
 
 class PerceptionPipeline:
     def __init__(self, cfg_path: str | Path = "configs/pipeline.yaml", use_depth_model: bool = True,
-                 weights: str | None = None):
+                 weights: str | None = None, overrides: dict | None = None):
+        """overrides: {section: {key: value}} merged over the YAML, e.g. {"camera": {"width": 800, "height": 450}}."""
         from ultralytics import YOLO
 
         self.cfg = yaml.safe_load(Path(cfg_path).read_text())
+        for section, values in (overrides or {}).items():
+            self.cfg.setdefault(section, {}).update(values)
         cam, det = self.cfg["camera"], self.cfg["detector"]
         self.w, self.h, self.fov = cam["width"], cam["height"], cam["fov_deg"]
         self.cam_h = cam["mount_height_m"]
         self.model = YOLO(weights or det["weights"], task="detect")
         self.names = {i: CLASS_ALIASES.get(n, n) for i, n in self.model.names.items()}
-        self.lanes = ClassicalLaneDetector(self.w, self.h, self.cfg["lanes"]["src"], self.cfg["lanes"]["smoothing"])
+        lcfg = self.cfg["lanes"]
+        mask_fn = None
+        # learned: LR-ASPP pixel mask (F1 0.88 on unseen Town02 vs 0.15 classical, reports/lanes_comparison_full.json)
+        # feeds the same bird's-eye polynomial fit that produces the AEB corridor
+        if lcfg.get("source", "classical") == "learned" and Path(lcfg.get("weights", "")).exists():
+            from perception.lanes.seg_model import LaneSegmenter
+            mask_fn = LaneSegmenter(lcfg["weights"])
+        self.lane_source = "learned" if mask_fn is not None else "classical"
+        self.lanes = ClassicalLaneDetector(self.w, self.h, lcfg["src"], lcfg["smoothing"], mask_fn=mask_fn)
         self.aeb = AEB(AEBConfig.from_dict(self.cfg["aeb"]))
         dcfg = self.cfg["depth"]
         # ground_plane: box bottom + camera height (measured 4-7 % median error on CARLA vs 18-62 % for calibrated
