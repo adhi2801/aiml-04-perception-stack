@@ -8,6 +8,7 @@ Metrics (lower half of the image, where lanes matter for control):
   * latency per frame (ms)
   * robustness: per-sequence breakdown (weather / town) when several --seq are given
 """
+
 from __future__ import annotations
 
 import argparse
@@ -45,9 +46,12 @@ def evaluate(seq: Path, classical: ClassicalLaneDetector, learned: LaneSegmenter
     out = {}
     for name, (tp_p, n_p, tp_g, n_g) in acc.items():
         prec, rec = tp_p / max(n_p, 1), tp_g / max(n_g, 1)
-        out[name] = {"precision": round(prec, 4), "recall": round(rec, 4),
-                     "f1": round(2 * prec * rec / max(prec + rec, 1e-9), 4),
-                     "latency_ms_p50": round(float(np.median(lat[name][5:])), 2)}
+        out[name] = {
+            "precision": round(prec, 4),
+            "recall": round(rec, 4),
+            "f1": round(2 * prec * rec / max(prec + rec, 1e-9), 4),
+            "latency_ms_p50": round(float(np.median(lat[name][5:])), 2),
+        }
     return out
 
 
@@ -65,15 +69,23 @@ def main() -> None:
     results = {}
     for seq in args.seq:
         meta = json.loads((seq / "meta.json").read_text())
-        classical = ClassicalLaneDetector(meta["camera"]["width"], meta["camera"]["height"], cfg["lanes"]["src"],
-                                          cfg["lanes"]["smoothing"])
-        results[seq.name] = {"town": meta["town"], "weather": meta["weather"], **evaluate(seq, classical, learned, args.tol)}
+        classical = ClassicalLaneDetector(
+            meta["camera"]["width"], meta["camera"]["height"], cfg["lanes"]["src"], cfg["lanes"]["smoothing"]
+        )
+        results[seq.name] = {
+            "town": meta["town"],
+            "weather": meta["weather"],
+            **evaluate(seq, classical, learned, args.tol),
+        }
         print(seq.name, json.dumps(results[seq.name]))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     sidecar = Path(args.weights).with_suffix(".json")  # how the checkpoint and threshold were selected
     selection = json.loads(sidecar.read_text()) if sidecar.exists() else None
-    args.out.write_text(json.dumps({"weights": str(args.weights), "selection": selection, "tol_px": args.tol,
-                                    "sequences": results}, indent=2))
+    args.out.write_text(
+        json.dumps(
+            {"weights": str(args.weights), "selection": selection, "tol_px": args.tol, "sequences": results}, indent=2
+        )
+    )
 
 
 if __name__ == "__main__":

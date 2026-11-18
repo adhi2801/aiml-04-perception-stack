@@ -6,6 +6,7 @@ Subscribes /aeb/command (Int8: 0 cruise, 1 warn, 2 brake)
 The ego drives on Traffic Manager autopilot that ignores pedestrians and vehicles, so only
 /aeb/command can stop it. A brake command takes control away from autopilot until the threat clears.
 """
+
 import os
 import random
 import sys
@@ -23,16 +24,34 @@ ROOT = Path(os.environ.get("PERCEPTION_ROOT", Path.home() / "aiml-04-perception-
 sys.path.insert(0, str(ROOT / "carla_tools"))
 
 import carla  # noqa: E402
-from carla_common import (CamSpec, attach_camera, attach_collision, depth_to_meters, get_frame,  # noqa: E402
-                          rgb_to_bgr, spawn_ego)
+from carla_common import (  # noqa: E402
+    CamSpec,
+    attach_camera,
+    attach_collision,
+    depth_to_meters,
+    get_frame,
+    rgb_to_bgr,
+    spawn_ego,
+)
 
 
 class CarlaBridge(Node):
     def __init__(self):
         super().__init__("carla_bridge")
-        p = {k: self.declare_parameter(k, v).value for k, v in {
-            "host": os.environ.get("CARLA_HOST", "localhost"), "port": 2000, "fps": 20.0, "spawn_index": 0,
-            "scenario": "cpna25", "width": 1280, "height": 720, "fov": 90.0, "seed": 0}.items()}
+        p = {
+            k: self.declare_parameter(k, v).value
+            for k, v in {
+                "host": os.environ.get("CARLA_HOST", "localhost"),
+                "port": 2000,
+                "fps": 20.0,
+                "spawn_index": 0,
+                "scenario": "cpna25",
+                "width": 1280,
+                "height": 720,
+                "fov": 90.0,
+                "seed": 0,
+            }.items()
+        }
         self.client = carla.Client(p["host"], p["port"])
         self.client.set_timeout(30.0)
         self.world = self.client.get_world()
@@ -57,8 +76,10 @@ class CarlaBridge(Node):
         self.hazard_tick = None
         if p["scenario"] != "none":
             from run_scenarios import setup_hazard
-            _, self.hazard_tick = setup_hazard(self.world, self.actors, self.ego, p["scenario"], random.Random(p["seed"]),
-                                               self.tm)
+
+            _, self.hazard_tick = setup_hazard(
+                self.world, self.actors, self.ego, p["scenario"], random.Random(p["seed"]), self.tm
+            )
 
         self.command, self.braking, self.step = 0, False, 0
         self.pub_rgb = self.create_publisher(Image, "/carla/ego/rgb", qos_profile_sensor_data)

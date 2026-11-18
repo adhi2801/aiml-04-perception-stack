@@ -1,16 +1,23 @@
 """CPU-only tests for the safety-relevant logic (no CARLA, ROS2, GPU or dataset needed)."""
+
 import cv2
 import numpy as np
 import pytest
 
-from perception.depth.metric import (depth_metrics, fit_inverse_affine, focal_px, ground_plane_distance,
-                                     object_distance, to_metric)
+from perception.depth.metric import (
+    depth_metrics,
+    fit_inverse_affine,
+    focal_px,
+    ground_plane_distance,
+    object_distance,
+    to_metric,
+)
 from perception.fusion.aeb import AEB, Action, AEBConfig, TrackedObject, estimate_ttc
 from perception.lanes.classical import ClassicalLaneDetector
 
 W = 1280
-CENTER_BOX = (600, 300, 680, 500)   # in the ego corridor
-SIDE_BOX = (20, 300, 100, 500)      # far left, outside the corridor
+CENTER_BOX = (600, 300, 680, 500)  # in the ego corridor
+SIDE_BOX = (20, 300, 100, 500)  # far left, outside the corridor
 
 
 def run(aeb, dists, box=CENTER_BOX, cls="car", dt=0.1):
@@ -87,7 +94,7 @@ def test_object_distance_ignores_background():
 
 
 def test_ground_plane_distance_geometry():
-    f = focal_px(1280, 90)  # 640 px
+    assert focal_px(1280, 90) == pytest.approx(640.0)  # 90 deg FOV over 1280 px
     # bottom edge 64 px below the horizon at 1.5 m camera height -> 640 * 1.5 / 64 = 15 m
     assert ground_plane_distance((0, 0, 10, 360 + 64), 720, 1280, 90, 1.5) == pytest.approx(15.0)
     assert ground_plane_distance((0, 0, 10, 300), 720, 1280, 90, 1.5) is None  # above horizon

@@ -2,8 +2,18 @@ import json
 
 import numpy as np
 
-from perception.falsify import GP, SPACE, Falsifier, boundary_grid, latin_hypercube, margin, random_search, save, \
-    summary, to_params
+from perception.falsify import (
+    GP,
+    SPACE,
+    Falsifier,
+    boundary_grid,
+    latin_hypercube,
+    margin,
+    random_search,
+    save,
+    summary,
+    to_params,
+)
 
 
 def toy_aeb(p: dict) -> float:
@@ -34,7 +44,7 @@ def test_to_params_respects_ranges_and_integers():
 
 def test_gp_interpolates_and_is_uncertain_far_from_data():
     rng = np.random.default_rng(0)
-    X = rng.random((40, 2)) * 0.5            # data only in the lower-left quarter
+    X = rng.random((40, 2)) * 0.5  # data only in the lower-left quarter
     y = np.sin(4 * X[:, 0]) + X[:, 1]
     gp = GP().fit(X, y)
     mu, sd = gp.predict(X)
@@ -64,11 +74,12 @@ def test_lcb_steps_dig_for_the_worst_case():
 
 def test_boundary_slice_matches_the_true_failure_region():
     hist = Falsifier(toy_aeb, n_init=12, seed=1).run(60)
-    g = boundary_grid(hist, SPACE, "ego_kmh", "sun_altitude_deg", fixed={"occluded": 1, "ped_kmh": 6.5,
-                                                                        "overlap": 0.5, "rain": 40})
+    g = boundary_grid(
+        hist, SPACE, "ego_kmh", "sun_altitude_deg", fixed={"occluded": 1, "ped_kmh": 6.5, "overlap": 0.5, "rain": 40}
+    )
     p = np.array(g["p_fail"])
-    assert p[-1, 0] > 0.8   # fastest + darkest corner: failure
-    assert p[0, -1] < 0.2   # slowest + brightest corner: safe
+    assert p[-1, 0] > 0.8  # fastest + darkest corner: failure
+    assert p[0, -1] < 0.2  # slowest + brightest corner: safe
 
 
 def test_save_writes_both_searches(tmp_path):

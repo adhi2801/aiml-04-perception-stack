@@ -19,6 +19,7 @@ def test_perfect_detections_score_one():
     f = frame([[0, 0, 10, 10], [50, 50, 80, 90]], [0, 1], [0.9, 0.8], [[0, 0, 10, 10], [50, 50, 80, 90]], [0, 1])
     m, m50, per = map_from_frames([f])
     assert np.isclose(m, 1.0) and np.isclose(m50, 1.0)
+    assert len(per) == 2 and all(np.isclose(v, 1.0) for v in per.values())  # both classes, each perfect
 
 
 def test_low_confidence_false_positive_does_not_hurt_ap():
@@ -54,9 +55,14 @@ def test_pick_conf_is_the_strictest_threshold_reaching_target_recall():
     gc = np.zeros(11, int)
     gd = np.array([10.0] * 10 + [60.0])
     best = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0])
-    f = {"gc": gc, "gd": gd, "best_conf": best, "ps": np.array([0.95, 0.4]),
-         "tp": np.array([[True] * 10, [False] * 10])}
+    f = {
+        "gc": gc,
+        "gd": gd,
+        "best_conf": best,
+        "ps": np.array([0.95, 0.4]),
+        "tp": np.array([[True] * 10, [False] * 10]),
+    }
     out = pick_conf([f], target_recall=0.8, max_dist=30)
     assert out["n_objects"] == 10 and out["reached_target"]
-    assert out["conf"] == 0.3 and out["recall_at_conf"] == 0.8      # 0.3 keeps 8 of 10; 0.31 would keep 7
-    assert out["false_detections_per_frame"] == 1.0                  # the 0.4 detection is a false positive
+    assert out["conf"] == 0.3 and out["recall_at_conf"] == 0.8  # 0.3 keeps 8 of 10; 0.31 would keep 7
+    assert out["false_detections_per_frame"] == 1.0  # the 0.4 detection is a false positive

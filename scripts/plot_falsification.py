@@ -7,6 +7,7 @@
    not as exact members of the slice.
 2. Search efficiency: cumulative failures found vs trials, falsifier vs random search on the same budget.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,15 +16,20 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
+import matplotlib.pyplot as plt
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-TITLES = {"speed_vs_sun_occluded": "Pedestrian hidden by a parked van",
-          "speed_vs_sun_clear_view": "Clear line of sight",
-          "speed_vs_ped_speed": "Daylight, clear view"}
-LABELS = {"ego_kmh": "Ego speed (km/h)", "sun_altitude_deg": "Sun altitude (°, < 0 = night)",
-          "ped_kmh": "Pedestrian walking speed (km/h)"}
+TITLES = {
+    "speed_vs_sun_occluded": "Pedestrian hidden by a parked van",
+    "speed_vs_sun_clear_view": "Clear line of sight",
+    "speed_vs_ped_speed": "Daylight, clear view",
+}
+LABELS = {
+    "ego_kmh": "Ego speed (km/h)",
+    "sun_altitude_deg": "Sun altitude (°, < 0 = night)",
+    "ped_kmh": "Pedestrian walking speed (km/h)",
+}
 
 
 def main() -> None:
@@ -40,7 +46,7 @@ def main() -> None:
     slices = d.get("boundary", {})
     fig, axes = plt.subplots(1, len(slices), figsize=(5.2 * len(slices), 4.4), squeeze=False)
     trials = d["falsifier"]["trials"]
-    for ax, (key, g) in zip(axes[0], slices.items()):
+    for ax, (key, g) in zip(axes[0], slices.items(), strict=True):
         x, y, p = np.array(g["x_values"]), np.array(g["y_values"]), np.array(g["p_fail"]).T
         im = ax.contourf(x, y, p, levels=np.linspace(0, 1, 11), cmap="RdYlGn_r", vmin=0, vmax=1)
         ax.contour(x, y, p, levels=[0.5], colors="black", linewidths=1.5)
@@ -49,8 +55,7 @@ def main() -> None:
             if t["margin"] < 0:
                 ax.scatter(px, py, marker="x", s=28, color="#b00020", linewidths=1.4, alpha=0.8)
             else:
-                ax.scatter(px, py, marker="o", s=28, facecolors="none", edgecolors="#1b7f3a", linewidths=1.4,
-                           alpha=0.8)
+                ax.scatter(px, py, marker="o", s=28, facecolors="none", edgecolors="#1b7f3a", linewidths=1.4, alpha=0.8)
         ax.set_title(TITLES.get(key, key), fontsize=11)
         ax.set_xlabel(LABELS.get(g["x"], g["x"]))
         ax.set_ylabel(LABELS.get(g["y"], g["y"]))
@@ -63,8 +68,13 @@ def main() -> None:
     for name, color in (("falsifier", "#3b5bdb"), ("random", "#868e96")):
         found = d[name]["summary"]["failures_found_by_trial"]
         if found:
-            ax.plot(np.arange(1, len(found) + 1), found, color=color, lw=2,
-                    label=f"{'Falsification search' if name == 'falsifier' else 'Random search'} ({found[-1]} failures)")
+            ax.plot(
+                np.arange(1, len(found) + 1),
+                found,
+                color=color,
+                lw=2,
+                label=f"{'Falsification search' if name == 'falsifier' else 'Random search'} ({found[-1]} failures)",
+            )
     ax.set_xlabel("CARLA trials")
     ax.set_ylabel("Failures found")
     ax.set_title("Same budget, more failures found")

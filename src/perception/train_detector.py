@@ -7,6 +7,7 @@ TRAINING town's sequence. The test town (Town02) is never converted into this da
 by perception.eval_detection. The run's args, results.csv and weights are copied into models/ and reports/ so the
 README numbers trace back to a file.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,10 +36,27 @@ def main() -> None:
         model.train(resume=True)
     else:
         model = YOLO(args.base)
-        model.train(data=args.data, epochs=args.epochs, imgsz=args.imgsz, batch=args.batch, workers=args.workers,
-                    seed=args.seed, deterministic=False, project="runs/detect", name=args.name, exist_ok=True,
-                    cos_lr=True, close_mosaic=5, fliplr=0.5, mosaic=1.0, mixup=0.05, hsv_h=0.02, patience=15,
-                    plots=True, verbose=False)
+        model.train(
+            data=args.data,
+            epochs=args.epochs,
+            imgsz=args.imgsz,
+            batch=args.batch,
+            workers=args.workers,
+            seed=args.seed,
+            deterministic=False,
+            project="runs/detect",
+            name=args.name,
+            exist_ok=True,
+            cos_lr=True,
+            close_mosaic=5,
+            fliplr=0.5,
+            mosaic=1.0,
+            mixup=0.05,
+            hsv_h=0.02,
+            patience=15,
+            plots=True,
+            verbose=False,
+        )
     run = Path(model.trainer.save_dir)
     Path("models").mkdir(exist_ok=True)
     shutil.copy2(run / "weights" / "best.pt", Path("models") / f"{args.name}.pt")
@@ -47,13 +65,19 @@ def main() -> None:
     for f in ["results.csv", "args.yaml", "results.png", "confusion_matrix_normalized.png"]:
         if (run / f).exists():
             shutil.copy2(run / f, out / f)
-    val = YOLO(Path("models") / f"{args.name}.pt").val(data=args.data, imgsz=args.imgsz, batch=args.batch,
-                                                       plots=False, verbose=False)
+    val = YOLO(Path("models") / f"{args.name}.pt").val(
+        data=args.data, imgsz=args.imgsz, batch=args.batch, plots=False, verbose=False
+    )
     names = val.names
-    summary = {"split": "val (held-out tail of each training town; used for best-epoch selection)",
-               "map50_95": round(float(val.box.map), 4), "map50": round(float(val.box.map50), 4),
-               "per_class_map50_95": {names[int(c)]: round(float(m), 4)
-                                      for c, m in zip(val.box.ap_class_index, val.box.maps[val.box.ap_class_index])}}
+    summary = {
+        "split": "val (held-out tail of each training town; used for best-epoch selection)",
+        "map50_95": round(float(val.box.map), 4),
+        "map50": round(float(val.box.map50), 4),
+        "per_class_map50_95": {
+            names[int(c)]: round(float(m), 4)
+            for c, m in zip(val.box.ap_class_index, val.box.maps[val.box.ap_class_index], strict=True)
+        },
+    }
     (out / "val_summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
 

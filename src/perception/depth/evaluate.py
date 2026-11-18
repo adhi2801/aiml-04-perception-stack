@@ -6,6 +6,7 @@ Reports (reports/depth_eval.json):
   * dense metrics vs CARLA ground truth: AbsRel, RMSE, delta<1.25
   * per-object distance error, MiDaS vs flat-ground geometry, binned by true distance
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,8 +17,7 @@ import cv2
 import numpy as np
 import yaml
 
-from perception.depth.metric import (depth_metrics, fit_inverse_affine, ground_plane_distance, object_distance,
-                                     to_metric)
+from perception.depth.metric import depth_metrics, fit_inverse_affine, ground_plane_distance, object_distance, to_metric
 from perception.depth.midas import MiDaS
 
 BINS = [(0, 10), (10, 20), (20, 40), (40, 80)]
@@ -27,9 +27,11 @@ def frames(seq: Path, stride: int):
     gts = [json.loads(line) for line in (seq / "gt.jsonl").read_text().splitlines()]
     for g in gts[::stride]:
         name = f"{g['frame']:06d}"
-        yield (cv2.imread(str(seq / "rgb" / f"{name}.jpg")),
-               cv2.imread(str(seq / "depth" / f"{name}.png"), cv2.IMREAD_UNCHANGED).astype(np.float32) / 100.0,
-               g["objects"])
+        yield (
+            cv2.imread(str(seq / "rgb" / f"{name}.jpg")),
+            cv2.imread(str(seq / "depth" / f"{name}.png"), cv2.IMREAD_UNCHANGED).astype(np.float32) / 100.0,
+            g["objects"],
+        )
 
 
 def main() -> None:
@@ -66,9 +68,12 @@ def main() -> None:
                 b = next((b for b in BINS if b[0] <= true < b[1]), None)
                 if b is None:
                     continue
-                est = {"midas": object_distance(pred, o["box"]),
-                       "ground_plane": ground_plane_distance(o["box"], cam["height"], cam["width"], cam["fov_deg"],
-                                                             cam["mount_height_m"])}
+                est = {
+                    "midas": object_distance(pred, o["box"]),
+                    "ground_plane": ground_plane_distance(
+                        o["box"], cam["height"], cam["width"], cam["fov_deg"], cam["mount_height_m"]
+                    ),
+                }
                 for k, v in est.items():
                     if v is not None:
                         per_obj[k][b].append(abs(v - true) / true)
@@ -79,7 +84,8 @@ def main() -> None:
         "dense": {k: round(sum(d[k] * d["n"] for d in dense) / n, 4) for k in ("abs_rel", "rmse_m", "delta1")},
         "object_distance_rel_error_median": {
             k: {f"{a}-{b}m": (round(float(np.median(v)), 3) if v else None) for (a, b), v in bins.items()}
-            for k, bins in per_obj.items()},
+            for k, bins in per_obj.items()
+        },
         "object_counts": {f"{a}-{b}m": len(v) for (a, b), v in per_obj["midas"].items()},
     }
     Path("reports").mkdir(exist_ok=True)

@@ -3,6 +3,7 @@
 If perception goes silent for longer than `watchdog_s` (crash, GPU stall, dropped link), the node
 commands BRAKE: in a safety system, losing perception must never look like "road is clear".
 """
+
 import json
 import os
 import sys
@@ -43,11 +44,23 @@ class AEBNode(Node):
             corridor_fn = lambda y: (float(np.interp(y, c[:, 0], c[:, 1])), float(np.interp(y, c[:, 0], c[:, 2])))  # noqa: E731
         action, threat = self.aeb.step(data["t"], objs, data["img_w"], corridor_fn)
         self.pub_cmd.publish(Int8(data=int(action)))
-        self.pub_status.publish(String(data=json.dumps({
-            "action": action.name,
-            "threat": None if threat is None else {"id": threat.track_id, "cls": threat.cls,
-                                                   "distance_m": round(threat.distance_m, 2),
-                                                   "ttc_s": None if threat.ttc_s is None else round(threat.ttc_s, 2)}})))
+        self.pub_status.publish(
+            String(
+                data=json.dumps(
+                    {
+                        "action": action.name,
+                        "threat": None
+                        if threat is None
+                        else {
+                            "id": threat.track_id,
+                            "cls": threat.cls,
+                            "distance_m": round(threat.distance_m, 2),
+                            "ttc_s": None if threat.ttc_s is None else round(threat.ttc_s, 2),
+                        },
+                    }
+                )
+            )
+        )
         if action == Action.BRAKE:
             self.get_logger().warn(f"BRAKE: {threat}", throttle_duration_sec=1.0)
 

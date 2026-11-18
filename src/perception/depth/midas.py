@@ -1,4 +1,5 @@
 """MiDaS monocular depth (Ranftl et al.) via torch.hub, returning relative inverse depth at frame size."""
+
 from __future__ import annotations
 
 import cv2
@@ -23,6 +24,7 @@ class MiDaS:
         if self.half:
             x = x.half()
         pred = self.model(x)
-        pred = torch.nn.functional.interpolate(pred.unsqueeze(1).float(), size=bgr.shape[:2], mode="bicubic",
-                                               align_corners=False).squeeze()
+        pred = torch.nn.functional.interpolate(
+            pred.unsqueeze(1).float(), size=bgr.shape[:2], mode="bicubic", align_corners=False
+        ).squeeze()
         return pred.cpu().numpy()

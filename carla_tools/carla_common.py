@@ -1,4 +1,5 @@
 """Shared CARLA helpers: synchronous world, ego + sensors, ground-truth depth and 2D boxes."""
+
 from __future__ import annotations
 
 import math
@@ -15,8 +16,8 @@ class CamSpec:
     width: int = 1280
     height: int = 720
     fov: float = 90.0
-    x: float = 1.5     # meters forward of the vehicle origin
-    z: float = 1.5     # mount height (matches configs/pipeline.yaml)
+    x: float = 1.5  # meters forward of the vehicle origin
+    z: float = 1.5  # mount height (matches configs/pipeline.yaml)
 
 
 def intrinsics(spec: CamSpec) -> np.ndarray:
@@ -59,8 +60,11 @@ def spawn_ego(world, actors, spawn_index: int = 0, blueprint: str = "vehicle.tes
 
 
 def attach_camera(world, actors, ego, spec: CamSpec, kind: str = "rgb") -> tuple[carla.Sensor, queue.Queue]:
-    bp = world.get_blueprint_library().find({"rgb": "sensor.camera.rgb", "depth": "sensor.camera.depth",
-                                             "semantic": "sensor.camera.semantic_segmentation"}[kind])
+    bp = world.get_blueprint_library().find(
+        {"rgb": "sensor.camera.rgb", "depth": "sensor.camera.depth", "semantic": "sensor.camera.semantic_segmentation"}[
+            kind
+        ]
+    )
     bp.set_attribute("image_size_x", str(spec.width))
     bp.set_attribute("image_size_y", str(spec.height))
     bp.set_attribute("fov", str(spec.fov))
@@ -73,7 +77,9 @@ def attach_camera(world, actors, ego, spec: CamSpec, kind: str = "rgb") -> tuple
 
 def attach_collision(world, actors, ego) -> list:
     events: list = []
-    s = world.spawn_actor(world.get_blueprint_library().find("sensor.other.collision"), carla.Transform(), attach_to=ego)
+    s = world.spawn_actor(
+        world.get_blueprint_library().find("sensor.other.collision"), carla.Transform(), attach_to=ego
+    )
     s.listen(lambda e: events.append((e.frame, e.other_actor.type_id)))
     actors.append(s)
     return events
@@ -93,12 +99,13 @@ def rgb_to_bgr(img: carla.Image) -> np.ndarray:
 
 def depth_to_meters(img: carla.Image) -> np.ndarray:
     bgra = np.frombuffer(img.raw_data, np.uint8).reshape(img.height, img.width, 4).astype(np.float32)
-    normalized = (bgra[..., 2] + bgra[..., 1] * 256 + bgra[..., 0] * 65536) / (256 ** 3 - 1)
+    normalized = (bgra[..., 2] + bgra[..., 1] * 256 + bgra[..., 0] * 65536) / (256**3 - 1)
     return 1000.0 * normalized
 
 
-def gt_boxes(world, camera: carla.Sensor, ego: carla.Actor, spec: CamSpec, depth_m: np.ndarray,
-             max_dist: float = 60.0) -> list[dict]:
+def gt_boxes(
+    world, camera: carla.Sensor, ego: carla.Actor, spec: CamSpec, depth_m: np.ndarray, max_dist: float = 60.0
+) -> list[dict]:
     """Projected 2D boxes for visible vehicles and walkers, with actor id and true distance.
 
     Occlusion check: at least 10% of the box must have depth within ~bbox extent of the actor distance.
@@ -127,13 +134,19 @@ def gt_boxes(world, camera: carla.Sensor, ego: carla.Actor, spec: CamSpec, depth
         x2, y2 = np.clip(uv.max(axis=1), 0, [spec.width - 1, spec.height - 1])
         if (x2 - x1) < 4 or (y2 - y1) < 4:
             continue
-        patch = depth_m[int(y1):int(y2), int(x1):int(x2)]
+        patch = depth_m[int(y1) : int(y2), int(x1) : int(x2)]
         extent = max(actor.bounding_box.extent.x, actor.bounding_box.extent.y) + 1.0
         if np.mean(np.abs(patch - float(np.median(cam[2]))) < extent) < 0.1:
             continue  # occluded
         cls = "pedestrian" if actor.type_id.startswith("walker.") else _vehicle_class(actor)
-        out.append({"id": actor.id, "cls": cls, "box": [float(x1), float(y1), float(x2), float(y2)],
-                    "distance_m": float(np.min(cam[2]))})
+        out.append(
+            {
+                "id": actor.id,
+                "cls": cls,
+                "box": [float(x1), float(y1), float(x2), float(y2)],
+                "distance_m": float(np.min(cam[2])),
+            }
+        )
     return out
 
 

@@ -1,12 +1,14 @@
 """Record synthetic sequences with perfect labels: RGB, metric depth, lane-line mask, tracked 2D boxes.
 
   python carla_tools/record_dataset.py --town Town03 --frames 600 --out data/carla/Town03_clear
-  python carla_tools/record_dataset.py --town Town02_Opt --frames 600 --weather WetCloudySunset --out data/carla/Town02_test
+  python carla_tools/record_dataset.py --town Town02_Opt --frames 600 --weather WetCloudySunset \
+      --out data/carla/Town02_test
 
 One folder per sequence:
   rgb/000123.jpg  depth/000123.png (uint16 centimetres)  lanes/000123.png (255 = lane marking)  gt.jsonl
 Used for: lane model training/eval, MiDaS scale calibration, depth error by distance, MOT metrics.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,7 +18,6 @@ from pathlib import Path
 import carla
 import cv2
 import numpy as np
-
 from carla_common import CamSpec, attach_camera, depth_to_meters, get_frame, gt_boxes, rgb_to_bgr, spawn_ego, sync_world
 
 ROAD_LINE_TAG = 24  # CARLA >= 0.9.14 semantic tag for lane markings (it was 6 in older releases)
@@ -40,8 +41,13 @@ def spawn_traffic(client, world, tm, actors, n_vehicles: int, n_walkers: int, se
     bl = world.get_blueprint_library()
     spawns = sorted(world.get_map().get_spawn_points(), key=lambda sp: ahead_dist(near, sp.location))
     vbps = [b for b in bl.filter("vehicle.*") if int(b.get_attribute("number_of_wheels")) == 4]
-    batch = [carla.command.SpawnActor(rng.choice(vbps), sp).then(carla.command.SetAutopilot(carla.command.FutureActor, True, tm.get_port()))
-             for sp in spawns[:n_vehicles] if sp.location.distance(near.location) > 5]
+    batch = [
+        carla.command.SpawnActor(rng.choice(vbps), sp).then(
+            carla.command.SetAutopilot(carla.command.FutureActor, True, tm.get_port())
+        )
+        for sp in spawns[:n_vehicles]
+        if sp.location.distance(near.location) > 5
+    ]
     for r in client.apply_batch_sync(batch, True):
         if not r.error:
             actors.append(world.get_actor(r.actor_id))
@@ -65,7 +71,7 @@ def spawn_traffic(client, world, tm, actors, n_vehicles: int, n_walkers: int, se
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-  # 127.0.0.1, not localhost: CARLA listens on IPv4 only and localhost can resolve to ::1
+    # 127.0.0.1, not localhost: CARLA listens on IPv4 only and localhost can resolve to ::1
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=2000)
     ap.add_argument("--town", default="Town03")
@@ -121,12 +127,27 @@ def main() -> None:
                 # uint16 centimetres in a lossless PNG: ~5-10x smaller than raw float arrays, 1 cm resolution
                 cv2.imwrite(str(args.out / "depth" / f"{name}.png"), np.clip(depth * 100, 0, 65535).astype(np.uint16))
                 cv2.imwrite(str(args.out / "lanes" / f"{name}.png"), ((tags == ROAD_LINE_TAG) * 255).astype(np.uint8))
-                gt_file.write(json.dumps({"frame": saved, "t": round(tick / 20, 3), "objects":
-                                          gt_boxes(world, rgb_cam, ego, spec, depth)}) + "\n")
+                gt_file.write(
+                    json.dumps(
+                        {
+                            "frame": saved,
+                            "t": round(tick / 20, 3),
+                            "objects": gt_boxes(world, rgb_cam, ego, spec, depth),
+                        }
+                    )
+                    + "\n"
+                )
                 saved += 1
                 if saved % 100 == 0:
                     print(f"{saved}/{args.frames}")
-    meta = {"town": args.town, "weather": args.weather, "frames": saved, "ego_spawn": spawn, "camera": vars(spec), "fps": 20 / args.every}
+    meta = {
+        "town": args.town,
+        "weather": args.weather,
+        "frames": saved,
+        "ego_spawn": spawn,
+        "camera": vars(spec),
+        "fps": 20 / args.every,
+    }
     (args.out / "meta.json").write_text(json.dumps(meta, indent=2))
 
 

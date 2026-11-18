@@ -6,6 +6,7 @@ Publishes  /perception/detections   vision_msgs/Detection2DArray  (standard, for
            /perception/debug_image  sensor_msgs/Image (annotated)
            /perception/latency_ms   std_msgs/Float32
 """
+
 import json
 import os
 import sys
@@ -45,7 +46,9 @@ class PerceptionNode(Node):
         self.pub_obj = self.create_publisher(String, "/perception/objects", 10)
         self.pub_dbg = self.create_publisher(Image, "/perception/debug_image", qos_profile_sensor_data)
         self.pub_lat = self.create_publisher(Float32, "/perception/latency_ms", 10)
-        self.get_logger().info(f"perception ready (weights={self.pipe.cfg['detector']['weights']}, oracle_depth={self.oracle})")
+        self.get_logger().info(
+            f"perception ready (weights={self.pipe.cfg['detector']['weights']}, oracle_depth={self.oracle})"
+        )
 
     def on_depth(self, msg: Image):
         self.latest_depth = from_msg(msg)
@@ -74,11 +77,22 @@ class PerceptionNode(Node):
                 c = self.pipe.lanes.corridor_at(float(y))
                 if c:
                     corridor.append([float(y), *c])
-        self.pub_obj.publish(String(data=json.dumps({
-            "t": t, "img_w": bgr.shape[1],
-            "objects": [{"id": o.track_id, "cls": o.cls, "box": o.box, "distance_m": o.distance_m, "conf": o.conf}
-                        for o in res.objects],
-            "corridor": corridor, "timings_ms": res.timings_ms})))
+        self.pub_obj.publish(
+            String(
+                data=json.dumps(
+                    {
+                        "t": t,
+                        "img_w": bgr.shape[1],
+                        "objects": [
+                            {"id": o.track_id, "cls": o.cls, "box": o.box, "distance_m": o.distance_m, "conf": o.conf}
+                            for o in res.objects
+                        ],
+                        "corridor": corridor,
+                        "timings_ms": res.timings_ms,
+                    }
+                )
+            )
+        )
         self.pub_dbg.publish(to_msg(self.pipe.draw(bgr, res), "bgr8", msg.header))
         self.pub_lat.publish(Float32(data=(time.perf_counter() - t0) * 1000))
 

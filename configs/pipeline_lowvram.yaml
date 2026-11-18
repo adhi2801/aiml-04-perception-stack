@@ -7,7 +7,7 @@ camera:
   mount_height_m: 1.5          # used by the ground-plane distance estimate
 
 detector:
-  weights: yolo11n.pt          # COCO baseline on CPU (a TensorRT .engine only runs on the GPU); swap in the BDD fine-tune once trained
+  weights: yolo11n.pt          # COCO baseline on CPU (a TensorRT .engine only runs on the GPU); swap in models/yolo11s_carla.pt (CARLA fine-tune) when not comparing against COCO
   imgsz: 640
   conf: 0.30
   iou: 0.5

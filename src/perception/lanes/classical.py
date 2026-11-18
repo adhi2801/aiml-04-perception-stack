@@ -4,6 +4,7 @@ Deliberately interpretable, so it is the baseline the learned segmentation model
 (see lanes/evaluate.py). Temporal EMA smoothing plus a sanity check on lane width keep it from
 jumping between frames.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,16 +15,25 @@ import numpy as np
 
 @dataclass
 class LaneResult:
-    left_fit: np.ndarray | None    # x = a*y^2 + b*y + c in bird's-eye pixels
+    left_fit: np.ndarray | None  # x = a*y^2 + b*y + c in bird's-eye pixels
     right_fit: np.ndarray | None
-    mask: np.ndarray               # uint8 lane-line mask in the ORIGINAL image (for evaluation)
+    mask: np.ndarray  # uint8 lane-line mask in the ORIGINAL image (for evaluation)
     center_offset_px: float | None  # + means the car sits right of the lane center
     valid: bool
 
 
 class ClassicalLaneDetector:
-    def __init__(self, width: int, height: int, src_frac: list[list[float]], smoothing: float = 0.7,
-                 n_windows: int = 9, margin: int = 80, min_pix: int = 40, mask_fn=None):
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        src_frac: list[list[float]],
+        smoothing: float = 0.7,
+        n_windows: int = 9,
+        margin: int = 80,
+        min_pix: int = 40,
+        mask_fn=None,
+    ):
         """mask_fn(bgr) -> uint8 lane-pixel mask replaces the hand-tuned colour/edge threshold (step 1), e.g. the
         learned LaneSegmenter; the bird's-eye fit, sanity check, smoothing and ego corridor stay the same."""
         self.w, self.h = width, height
@@ -40,18 +50,18 @@ class ClassicalLaneDetector:
     @staticmethod
     def threshold(bgr: np.ndarray) -> np.ndarray:
         hls = cv2.cvtColor(bgr, cv2.COLOR_BGR2HLS)
-        l, s = hls[..., 1], hls[..., 2]
+        light, s = hls[..., 1], hls[..., 2]
         gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
         sobel = np.abs(cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3))
         sobel = (255 * sobel / max(sobel.max(), 1e-6)).astype(np.uint8)
-        white = (l > 200)
-        yellow = (s > 120) & (l > 100) & (hls[..., 0] > 15) & (hls[..., 0] < 35)
-        edges = (sobel > 40) & (l > 120)
+        white = light > 200
+        yellow = (s > 120) & (light > 100) & (hls[..., 0] > 15) & (hls[..., 0] < 35)
+        edges = (sobel > 40) & (light > 120)
         return ((white | yellow | edges) * 255).astype(np.uint8)
 
     # ---- 2. sliding-window search in bird's-eye view ----
     def _search(self, warped: np.ndarray) -> tuple[np.ndarray | None, np.ndarray | None]:
-        hist = warped[warped.shape[0] // 2:].sum(axis=0)
+        hist = warped[warped.shape[0] // 2 :].sum(axis=0)
         mid = hist.shape[0] // 2
         bases = [int(np.argmax(hist[:mid])), int(np.argmax(hist[mid:]) + mid)]
         ys, xs = warped.nonzero()
@@ -61,7 +71,9 @@ class ClassicalLaneDetector:
             x_cur, idx = base, []
             for wdw in range(self.n_windows):
                 y_lo, y_hi = warped.shape[0] - (wdw + 1) * win_h, warped.shape[0] - wdw * win_h
-                good = ((ys >= y_lo) & (ys < y_hi) & (xs >= x_cur - self.margin) & (xs < x_cur + self.margin)).nonzero()[0]
+                good = (
+                    (ys >= y_lo) & (ys < y_hi) & (xs >= x_cur - self.margin) & (xs < x_cur + self.margin)
+                ).nonzero()[0]
                 idx.append(good)
                 if len(good) > self.min_pix:
                     x_cur = int(xs[good].mean())

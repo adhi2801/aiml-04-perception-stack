@@ -1,8 +1,9 @@
 """Write the README results section from reports/*.json (so no number in the README is typed by hand).
 
-  python scripts/results_table.py            # rewrites the block between the results markers in README.md
-  python scripts/results_table.py --check    # exit 1 if README.md is out of date with reports/ (used in CI)
+python scripts/results_table.py            # rewrites the block between the results markers in README.md
+python scripts/results_table.py --check    # exit 1 if README.md is out of date with reports/ (used in CI)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -32,22 +33,31 @@ def detection() -> list[str]:
     d = load("detection_eval.json")
     if not d:
         return ["*Detection: not run yet (`python -m perception.eval_detection`).*", ""]
-    rows = ["### Detection: unseen test town, " + f"{d['town'].replace('_Opt', '')} ({d['weather']}, {d['frames']} frames)",
-            "",
-            f"Ground truth from the simulator ({d['gt_objects']['pedestrian']} pedestrian and {d['gt_objects']['vehicle']} "
-            "vehicle boxes). Classes collapsed to pedestrian / vehicle so a COCO model and the CARLA-tuned model are "
-            "scored on the same label space. 95 % CI: bootstrap over frames.", "",
-            "| Detector | mAP50-95 (95 % CI) | mAP50 (95 % CI) | AP pedestrian | AP vehicle | "
-            "Pedestrian recall < 15 m | 15–30 m | 30–50 m |",
-            "|---|---|---|---|---|---|---|---|"]
+    rows = [
+        "### Detection: unseen test town, " + f"{d['town'].replace('_Opt', '')} ({d['weather']}, {d['frames']} frames)",
+        "",
+        f"Ground truth from the simulator ({d['gt_objects']['pedestrian']} pedestrian and {d['gt_objects']['vehicle']} "
+        "vehicle boxes). Classes collapsed to pedestrian / vehicle so a COCO model and the CARLA-tuned model are "
+        "scored on the same label space. 95 % CI: bootstrap over frames.",
+        "",
+        "| Detector | mAP50-95 (95 % CI) | mAP50 (95 % CI) | AP pedestrian | AP vehicle | "
+        "Pedestrian recall < 15 m | 15–30 m | 30–50 m |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
     for label, m in d["models"].items():
         r = m["recall_by_distance"]["pedestrian"]
-        fmt = lambda k: f"{r[k]['recall']:.2f} (n={r[k]['n']})" if r[k]["recall"] is not None else "–"  # noqa: E731
-        rows.append(f"| {label} (`{Path(m['weights']).name}`) | **{m['map50_95']:.3f}** ({ci(m['map50_95_ci95'])}) | "
-                    f"{m['map50']:.3f} ({ci(m['map50_ci95'])}) | {m['per_class_map50_95']['pedestrian']:.3f} | "
-                    f"{m['per_class_map50_95']['vehicle']:.3f} | {fmt('0-15m')} | {fmt('15-30m')} | {fmt('30-50m')} |")
-    rows += ["", f"Recall is at the pipeline's operating confidence ({next(iter(d['models'].values()))['operating_conf']}), "
-             "IoU ≥ 0.5. Source: `reports/detection_eval.json`.", ""]
+        fmt = lambda k, r=r: f"{r[k]['recall']:.2f} (n={r[k]['n']})" if r[k]["recall"] is not None else "–"  # noqa: E731
+        rows.append(
+            f"| {label} (`{Path(m['weights']).name}`) | **{m['map50_95']:.3f}** ({ci(m['map50_95_ci95'])}) | "
+            f"{m['map50']:.3f} ({ci(m['map50_ci95'])}) | {m['per_class_map50_95']['pedestrian']:.3f} | "
+            f"{m['per_class_map50_95']['vehicle']:.3f} | {fmt('0-15m')} | {fmt('15-30m')} | {fmt('30-50m')} |"
+        )
+    rows += [
+        "",
+        f"Recall is at the pipeline's operating confidence ({next(iter(d['models'].values()))['operating_conf']}), "
+        "IoU ≥ 0.5. Source: `reports/detection_eval.json`.",
+        "",
+    ]
     return rows
 
 
@@ -55,28 +65,51 @@ def benchmark() -> list[str]:
     b = load("benchmark.json")
     if not b:
         return ["*Runtime benchmark: not run yet (`python -m perception.optimize.benchmark`).*", ""]
-    rows = [f"### Runtime: {b['gpu']}, {b['imgsz']}×{b['imgsz']}, batch 1", "",
-            "| Variant | Size (MB) | p50 latency (ms) | p95 (ms) | FPS | Speed-up | val mAP50-95 | mAP change (pts) |",
-            "|---|---|---|---|---|---|---|---|"]
+    env = b.get("env", {"device": b.get("gpu", "?")})
+    rows = [
+        f"### Runtime: {env['device']}, {b['imgsz']}×{b['imgsz']}, batch 1",
+        "",
+        "| Variant | Size (MB) | p50 end-to-end (ms) | p95 (ms) | p50 model only (ms) | FPS | Speed-up | "
+        "val mAP50-95 | mAP change (pts) |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
     for r in b["rows"]:
-        rows.append(f"| {r['variant']} | {r['size_mb']} | {r['p50_ms']} | {r['p95_ms']} | {r['fps']} | "
-                    f"{r['speedup_vs_pytorch']}× | {r['map50_95']:.3f} | {-r['map_drop_pts']:+.2f} |")
-    rows += ["", "Latency includes Ultralytics pre/post-processing (what the pipeline pays per frame). "
-             "Accuracy on the CARLA val split. Source: `reports/benchmark.json`.", ""]
+        speedup = r.get("speedup_vs_pytorch_gpu", r.get("speedup_vs_pytorch"))
+        rows.append(
+            f"| {r['variant']} | {r['size_mb']} | {r['p50_ms']} | {r['p95_ms']} | {r.get('model_p50_ms', '–')} | "
+            f"{r['fps']} | {speedup}× | {r['map50_95']:.3f} | {-r['map_drop_pts']:+.2f} |"
+        )
+    versions = ", ".join(
+        f"{k} {env[k]}" for k in ("tensorrt-cu12", "onnxruntime-gpu", "torch", "ultralytics") if k in env
+    )
+    rows += [
+        "",
+        "End-to-end = what the pipeline pays per frame (preprocess + model + NMS); model only = the network alone. "
+        "Speed-up is against PyTorch FP32 on the GPU. Accuracy on the CARLA val split, never the test town. "
+        + (f"Driver {env['nvidia_driver']}; {versions}. " if "nvidia_driver" in env else "")
+        + "Source: `reports/benchmark.json`.",
+        "",
+    ]
     return rows
 
 
 def tracking() -> list[str]:
-    rows = ["### Tracking: unseen test town (same detections for both trackers)", "",
-            "| Tracker | MOTA | IDF1 | ID switches | Precision | Recall | Mostly tracked / lost |", "|---|---|---|---|---|---|---|"]
+    rows = [
+        "### Tracking: unseen test town (same detections for both trackers)",
+        "",
+        "| Tracker | MOTA | IDF1 | ID switches | Precision | Recall | Mostly tracked / lost |",
+        "|---|---|---|---|---|---|---|",
+    ]
     found = False
     for name, label in (("tracking_bytetrack.json", "ByteTrack"), ("tracking_botsort.json", "BoT-SORT")):
         t = load(name)
         if t:
             found = True
             o = t["OVERALL"]
-            rows.append(f"| {label} | {o['mota']:.3f} | {o['idf1']:.3f} | {int(o['num_switches'])} | {o['precision']:.3f} | "
-                        f"{o['recall']:.3f} | {int(o['mostly_tracked'])} / {int(o['mostly_lost'])} |")
+            rows.append(
+                f"| {label} | {o['mota']:.3f} | {o['idf1']:.3f} | {int(o['num_switches'])} | {o['precision']:.3f} | "
+                f"{o['recall']:.3f} | {int(o['mostly_tracked'])} / {int(o['mostly_lost'])} |"
+            )
     meta = (load("tracking_bytetrack.json") or {}).get("_meta")
     note = f"Detector: `{Path(meta['weights']).name}`, confidence {meta['conf']}. " if meta else ""
     rows += ["", note + "Source: `reports/tracking_*.json`.", ""]
@@ -84,10 +117,17 @@ def tracking() -> list[str]:
 
 
 def lanes() -> list[str]:
-    rows = ["### Lanes: unseen test town, tolerant pixel F1 (5 px), lower half of the image", "",
-            "| Model | Trained on | Precision | Recall | F1 | p50 latency (ms) |", "|---|---|---|---|---|---|"]
+    rows = [
+        "### Lanes: unseen test town, tolerant pixel F1 (5 px), lower half of the image",
+        "",
+        "| Model | Trained on | Precision | Recall | F1 | p50 latency (ms) |",
+        "|---|---|---|---|---|---|",
+    ]
     found = False
-    for name, label in (("lanes_comparison_strict.json", "LR-ASPP (strict)"), ("lanes_comparison_full.json", "LR-ASPP")):
+    for name, label in (
+        ("lanes_comparison_strict.json", "LR-ASPP (strict)"),
+        ("lanes_comparison_full.json", "LR-ASPP"),
+    ):
         d = load(name)
         if not d:
             continue
@@ -95,14 +135,22 @@ def lanes() -> list[str]:
         seq = next(iter(d["sequences"].values()))
         if "Classical" not in "".join(rows):
             c = seq["classical"]
-            rows.append(f"| Classical OpenCV | hand-tuned | {c['precision']:.3f} | {c['recall']:.3f} | {c['f1']:.3f} | "
-                        f"{c['latency_ms_p50']} |")
+            rows.append(
+                f"| Classical OpenCV | hand-tuned | {c['precision']:.3f} | {c['recall']:.3f} | {c['f1']:.3f} | "
+                f"{c['latency_ms_p50']} |"
+            )
         lr = seq["learned"]
-        towns = ", ".join(t.split("_")[0] for t in d["selection"]["train"])
-        rows.append(f"| {label} | {towns} | {lr['precision']:.3f} | {lr['recall']:.3f} | **{lr['f1']:.3f}** | "
-                    f"{lr['latency_ms_p50']} |")
-    rows += ["", "Epoch and threshold chosen on the held-out last 15 % of each training town, never on the test town. "
-             "Source: `reports/lanes_comparison_*.json`.", ""]
+        towns = ", ".join(dict.fromkeys(t.split("_")[0] for t in d["selection"]["train"]))
+        rows.append(
+            f"| {label} | {towns} | {lr['precision']:.3f} | {lr['recall']:.3f} | **{lr['f1']:.3f}** | "
+            f"{lr['latency_ms_p50']} |"
+        )
+    rows += [
+        "",
+        "Epoch and threshold chosen on the held-out last 15 % of each training town, never on the test town. "
+        "Source: `reports/lanes_comparison_*.json`.",
+        "",
+    ]
     return rows if found else []
 
 
@@ -111,11 +159,19 @@ def depth() -> list[str]:
     if not d:
         return []
     bands = list(d["object_counts"])
-    rows = ["### Distance: median relative error per object, unseen test town", "",
-            "| Method | " + " | ".join(f"{b} (n={d['object_counts'][b]})" for b in bands) + " |",
-            "|---|" + "---|" * len(bands)]
-    for key, label in (("midas", "MiDaS small, calibrated on training towns"), ("ground_plane", "Flat-ground geometry (default)")):
-        rows.append(f"| {label} | " + " | ".join(pct(d["object_distance_rel_error_median"][key][b]) for b in bands) + " |")
+    rows = [
+        "### Distance: median relative error per object, unseen test town",
+        "",
+        "| Method | " + " | ".join(f"{b} (n={d['object_counts'][b]})" for b in bands) + " |",
+        "|---|" + "---|" * len(bands),
+    ]
+    for key, label in (
+        ("midas", "MiDaS small, calibrated on training towns"),
+        ("ground_plane", "Flat-ground geometry (default)"),
+    ):
+        rows.append(
+            f"| {label} | " + " | ".join(pct(d["object_distance_rel_error_median"][key][b]) for b in bands) + " |"
+        )
     rows += ["", "Source: `reports/depth_eval.json`.", ""]
     return rows
 
@@ -124,20 +180,34 @@ def ncap() -> list[str]:
     files = sorted(REPORTS.glob("ncap_*.json"))
     if not files:
         return ["*Closed-loop scenarios: not run yet (`carla_tools/run_scenarios.py`).*", ""]
-    rows = ["### Closed loop in CARLA: does the car stop? (Euro NCAP-style)", "",
-            "| Scenario | Detector | Test speed | Trials | Avoided | Mean impact speed | Mean speed reduction | "
-            "Median reaction (s) |", "|---|---|---|---|---|---|---|---|"]
+    rows = [
+        "### Closed loop in CARLA: does the car stop? (Euro NCAP-style)",
+        "",
+        "| Scenario | Detector | Test speed | Trials | Avoided | Mean impact speed | Mean speed reduction | "
+        "Median reaction (s) |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
     for f in files:
         s = json.loads(f.read_text())
         name = s["scenario"] + (" (oracle depth)" if s.get("oracle_depth") else "")
         for r in s["by_speed"]:
-            react = [t["reaction_s"] for t in s["per_trial"] if t["test_kmh"] == r["test_kmh"] and t["reaction_s"] is not None]
+            react = [
+                t["reaction_s"]
+                for t in s["per_trial"]
+                if t["test_kmh"] == r["test_kmh"] and t["reaction_s"] is not None
+            ]
             med = f"{sorted(react)[len(react) // 2]:.2f}" if react else "–"
-            rows.append(f"| {name} | `{Path(s['weights']).name}` | {r['test_kmh']:g} km/h | {r['trials']} | "
-                        f"**{r['avoided_rate']:.0%}** | {r['mean_impact_kmh']:.1f} km/h | "
-                        f"{r['mean_speed_reduction_kmh']:.1f} km/h | {med} |")
-    rows += ["", "Reaction = time from the hazard first being visible in the camera to the first BRAKE command. "
-             "Source: `reports/ncap_*.json`.", ""]
+            rows.append(
+                f"| {name} | `{Path(s['weights']).name}` | {r['test_kmh']:g} km/h | {r['trials']} | "
+                f"**{r['avoided_rate']:.0%}** | {r['mean_impact_kmh']:.1f} km/h | "
+                f"{r['mean_speed_reduction_kmh']:.1f} km/h | {med} |"
+            )
+    rows += [
+        "",
+        "Reaction = time from the hazard first being visible in the camera to the first BRAKE command. "
+        "Source: `reports/ncap_*.json`.",
+        "",
+    ]
     return rows
 
 

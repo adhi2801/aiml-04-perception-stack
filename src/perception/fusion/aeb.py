@@ -3,6 +3,7 @@
 Pure Python (no ROS, no CARLA), so every rule is unit-tested and the same code runs in the
 offline pipeline, the CARLA loop and the ROS2 decision node.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict, deque
@@ -49,7 +50,7 @@ class AEBConfig:
     history: int = 8
 
     @classmethod
-    def from_dict(cls, d: dict) -> "AEBConfig":
+    def from_dict(cls, d: dict) -> AEBConfig:
         d = {**d, "vulnerable_classes": tuple(d.get("vulnerable_classes", cls.vulnerable_classes))}
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
@@ -87,8 +88,9 @@ class AEB:
         half = self.cfg.corridor_half_width * img_w
         return abs(cx - img_w / 2) <= half
 
-    def step(self, t: float, objects: list[TrackedObject], img_w: int,
-             corridor_fn=None) -> tuple[Action, Threat | None]:
+    def step(
+        self, t: float, objects: list[TrackedObject], img_w: int, corridor_fn=None
+    ) -> tuple[Action, Threat | None]:
         """corridor_fn(y_pixel) -> (left_x, right_x) | None, typically from the lane detector."""
         live = set()
         worst: Threat | None = None
@@ -108,7 +110,9 @@ class AEB:
                 vulnerable = o.cls in self.cfg.vulnerable_classes
                 if o.distance_m < self.cfg.min_distance_m or (ttc is not None and ttc < self.cfg.ttc_brake_s):
                     action = Action.BRAKE
-                elif (ttc is not None and ttc < self.cfg.ttc_warn_s) or (vulnerable and o.distance_m < 2 * self.cfg.min_distance_m):
+                elif (ttc is not None and ttc < self.cfg.ttc_warn_s) or (
+                    vulnerable and o.distance_m < 2 * self.cfg.min_distance_m
+                ):
                     action = Action.WARN
             threat = Threat(o.track_id, o.cls, o.distance_m, ttc, closing, inside, action)
             if worst is None or (threat.action, -threat.distance_m) > (worst.action, -worst.distance_m):

@@ -5,6 +5,18 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Lint and format (ruff, rules in pyproject.toml)
+        run: |
+          uvx ruff@0.14.5 check src carla_tools tests scripts ros2_ws/src
+          uvx ruff@0.14.5 format --check src carla_tools tests scripts ros2_ws/src
+      - name: README results match reports/*.json (no number typed by hand)
+        run: python3 scripts/results_table.py --check
+
   unit:
     runs-on: ubuntu-latest
     steps:

@@ -1,4 +1,5 @@
 """sensor_msgs/Image <-> numpy without cv_bridge (avoids its NumPy-version coupling)."""
+
 import numpy as np
 from sensor_msgs.msg import Image
 
@@ -19,6 +20,9 @@ def to_msg(arr: np.ndarray, encoding: str, header=None) -> Image:
 
 def from_msg(msg: Image) -> np.ndarray:
     dtype, ch = _DTYPES[msg.encoding]
-    arr = np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width, ch) if ch > 1 else \
-        np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width)
+    arr = (
+        np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width, ch)
+        if ch > 1
+        else np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width)
+    )
     return arr[..., ::-1].copy() if msg.encoding == "rgb8" else arr.copy()

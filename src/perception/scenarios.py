@@ -12,6 +12,7 @@ The pedestrian is released at the moment that makes an un-braked car hit them ex
 car-following setup and the friction model are simplified, so results are "Euro NCAP-style", not a rating.
 Euro NCAP scores speed reduction for test speeds up to 40 km/h, which is what `summarize` reports.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,12 +23,12 @@ import numpy as np
 @dataclass(frozen=True)
 class Scenario:
     name: str
-    kind: str                 # "pedestrian" | "lead_vehicle"
-    side: int = 0             # +1 walks in from the right (nearside), -1 from the left (farside)
-    overlap: float = 0.5      # impact point as a fraction of the car width, measured from the pedestrian's side
-    ped_kmh: float = 5.0      # walking speed
-    start_offset_m: float = 0.0   # where the pedestrian waits, lateral distance from the lane centre
-    headway_m: float = 12.0   # CCRb: initial gap to the lead car
+    kind: str  # "pedestrian" | "lead_vehicle"
+    side: int = 0  # +1 walks in from the right (nearside), -1 from the left (farside)
+    overlap: float = 0.5  # impact point as a fraction of the car width, measured from the pedestrian's side
+    ped_kmh: float = 5.0  # walking speed
+    start_offset_m: float = 0.0  # where the pedestrian waits, lateral distance from the lane centre
+    headway_m: float = 12.0  # CCRb: initial gap to the lead car
 
 
 SCENARIOS = {
@@ -66,16 +67,28 @@ def summarize(trials: list[dict]) -> list[dict]:
     for v in sorted({t["test_kmh"] for t in trials}):
         ts = [t for t in trials if t["test_kmh"] == v]
         impact = np.array([t["impact_kmh"] if t["collided"] else 0.0 for t in ts])
-        rows.append({"test_kmh": v, "trials": len(ts),
-                     "avoided_rate": round(float(np.mean([not t["collided"] for t in ts])), 3),
-                     "mean_impact_kmh": round(float(impact.mean()), 1),
-                     "mean_speed_reduction_kmh": round(float(v - impact.mean()), 1)})
+        rows.append(
+            {
+                "test_kmh": v,
+                "trials": len(ts),
+                "avoided_rate": round(float(np.mean([not t["collided"] for t in ts])), 3),
+                "mean_impact_kmh": round(float(impact.mean()), 1),
+                "mean_speed_reduction_kmh": round(float(v - impact.mean()), 1),
+            }
+        )
     return rows
 
 
 def to_markdown(name: str, rows: list[dict]) -> str:
-    lines = [f"### {name}", "", "| Test speed | Trials | Avoided | Mean impact speed | Mean speed reduction |",
-             "|---|---|---|---|---|"]
-    lines += [f"| {r['test_kmh']:g} km/h | {r['trials']} | {r['avoided_rate']:.0%} | {r['mean_impact_kmh']:.1f} km/h | "
-              f"{r['mean_speed_reduction_kmh']:.1f} km/h |" for r in rows]
+    lines = [
+        f"### {name}",
+        "",
+        "| Test speed | Trials | Avoided | Mean impact speed | Mean speed reduction |",
+        "|---|---|---|---|---|",
+    ]
+    lines += [
+        f"| {r['test_kmh']:g} km/h | {r['trials']} | {r['avoided_rate']:.0%} | {r['mean_impact_kmh']:.1f} km/h | "
+        f"{r['mean_speed_reduction_kmh']:.1f} km/h |"
+        for r in rows
+    ]
     return "\n".join(lines) + "\n"

@@ -12,6 +12,7 @@ traffic lights/signs are ignored). Reported per model:
     what the AEB depends on (a pedestrian missed at 15 m matters more than one missed at 70 m).
 This script is meant to be run once per model on the test town; nothing here feeds back into training.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,8 +21,16 @@ from pathlib import Path
 
 import numpy as np
 
-EVAL = {"pedestrian": "pedestrian", "person": "pedestrian", "rider": "pedestrian",
-        "car": "vehicle", "truck": "vehicle", "bus": "vehicle", "motorcycle": "vehicle", "motorbike": "vehicle"}
+EVAL = {
+    "pedestrian": "pedestrian",
+    "person": "pedestrian",
+    "rider": "pedestrian",
+    "car": "vehicle",
+    "truck": "vehicle",
+    "bus": "vehicle",
+    "motorcycle": "vehicle",
+    "motorbike": "vehicle",
+}
 CLASSES = ["pedestrian", "vehicle"]
 IOUS = np.linspace(0.5, 0.95, 10)
 BANDS = [(0, 15), (15, 30), (30, 50), (50, 1e9)]
@@ -83,14 +92,16 @@ def map_from_frames(frames: list[dict]) -> tuple[float, float, dict]:
         tp = [f["tp"][f["pc"] == c] for f in frames]
         conf = [f["ps"][f["pc"] == c] for f in frames]
         n_gt = int(sum((f["gc"] == c).sum() for f in frames))
-        aps[CLASSES[c]] = average_precision(np.concatenate(tp) if tp else np.zeros((0, 10), bool),
-                                            np.concatenate(conf) if conf else np.zeros(0), n_gt)
+        aps[CLASSES[c]] = average_precision(
+            np.concatenate(tp) if tp else np.zeros((0, 10), bool), np.concatenate(conf) if conf else np.zeros(0), n_gt
+        )
     stack = np.array([a for a in aps.values() if not np.isnan(a).all()])
     return float(stack.mean()), float(stack[:, 0].mean()), {k: float(v.mean()) for k, v in aps.items()}
 
 
-def predict_sequence(seq: Path, weights: str, imgsz: int, min_height: int, op_conf: float,
-                     val_tail: float | None = None, model=None) -> list[dict]:
+def predict_sequence(
+    seq: Path, weights: str, imgsz: int, min_height: int, op_conf: float, val_tail: float | None = None, model=None
+) -> list[dict]:
     """val_tail: only the last fraction of the sequence (the validation frames carla_to_yolo held out)."""
     import cv2
     from ultralytics import YOLO
@@ -99,7 +110,7 @@ def predict_sequence(seq: Path, weights: str, imgsz: int, min_height: int, op_co
     frames = []
     lines = (seq / "gt.jsonl").read_text().splitlines()
     if val_tail:
-        lines = lines[int(len(lines) * (1 - val_tail)):]
+        lines = lines[int(len(lines) * (1 - val_tail)) :]
     for line in lines:
         g = json.loads(line)
         objs = [o for o in g["objects"] if o["cls"] in EVAL and o["box"][3] - o["box"][1] >= min_height]
@@ -112,7 +123,7 @@ def predict_sequence(seq: Path, weights: str, imgsz: int, min_height: int, op_co
         names = [model.names[int(c)] for c in r.boxes.cls.cpu().numpy()]
         keep = np.array([n in EVAL for n in names], bool)
         pb = b[keep] if len(b) else np.zeros((0, 4))
-        pc = np.array([CLASSES.index(EVAL[n]) for n, k in zip(names, keep) if k], int)
+        pc = np.array([CLASSES.index(EVAL[n]) for n, k in zip(names, keep, strict=True) if k], int)
         ps = r.boxes.conf.cpu().numpy()[keep] if len(b) else np.zeros(0)
         tp = match_frame(pb, pc, ps, gb, gc)
         # recall at the operating point, per GT object (IoU >= 0.5, same class, confidence >= op_conf)
@@ -146,11 +157,19 @@ def summarize(frames: list[dict], n_boot: int, seed: int, op_conf: float) -> dic
         for lo, hi in BANDS:
             hits = np.concatenate([f["hit"][(f["gc"] == c) & (f["gd"] >= lo) & (f["gd"] < hi)] for f in frames])
             label = f"{lo}-{int(hi)}m" if hi < 1e9 else f"{lo}m+"
-            recall.setdefault(CLASSES[c], {})[label] = {"recall": round(float(hits.mean()), 3) if len(hits) else None,
-                                                       "n": int(len(hits))}
-    return {"map50_95": round(m, 4), "map50_95_ci95": ci(0), "map50": round(m50, 4), "map50_ci95": ci(1),
-            "per_class_map50_95": {k: round(v, 4) for k, v in per_class.items()},
-            "operating_conf": op_conf, "recall_by_distance": recall}
+            recall.setdefault(CLASSES[c], {})[label] = {
+                "recall": round(float(hits.mean()), 3) if len(hits) else None,
+                "n": len(hits),
+            }
+    return {
+        "map50_95": round(m, 4),
+        "map50_95_ci95": ci(0),
+        "map50": round(m50, 4),
+        "map50_ci95": ci(1),
+        "per_class_map50_95": {k: round(v, 4) for k, v in per_class.items()},
+        "operating_conf": op_conf,
+        "recall_by_distance": recall,
+    }
 
 
 def pick_conf(frames: list[dict], target_recall: float, max_dist: float, cls: str = "pedestrian") -> dict:
@@ -164,9 +183,15 @@ def pick_conf(frames: list[dict], target_recall: float, max_dist: float, cls: st
     ok = np.where(recall >= target_recall)[0]
     conf = float(grid[ok[-1]]) if len(ok) else float(grid[0])
     fp = np.mean([int(((f["ps"] >= conf) & ~f["tp"][:, 0]).sum()) for f in frames])
-    return {"conf": conf, "recall_at_conf": round(float((best >= conf).mean()), 3), "target_recall": target_recall,
-            "max_dist_m": max_dist, "n_objects": int(len(best)), "false_detections_per_frame": round(float(fp), 2),
-            "reached_target": bool(len(ok))}
+    return {
+        "conf": conf,
+        "recall_at_conf": round(float((best >= conf).mean()), 3),
+        "target_recall": target_recall,
+        "max_dist_m": max_dist,
+        "n_objects": len(best),
+        "false_detections_per_frame": round(float(fp), 2),
+        "reached_target": bool(len(ok)),
+    }
 
 
 def choose_operating_points(args) -> None:
@@ -180,13 +205,21 @@ def choose_operating_points(args) -> None:
 
     if any("Town02" in s.name for s in args.seq):
         raise SystemExit("Town02 is the test town: operating points must be chosen on training-town validation frames")
-    out = {"split": f"validation: last {args.val_tail:.0%} of each training sequence",
-           "sequences": [s.name for s in args.seq], "models": {}}
+    out = {
+        "split": f"validation: last {args.val_tail:.0%} of each training sequence",
+        "sequences": [s.name for s in args.seq],
+        "models": {},
+    }
     for spec in args.model:
         label, weights = spec.split("=", 1)
         model = YOLO(weights, task="detect")
-        frames = [f for s in args.seq for f in predict_sequence(s, weights, args.imgsz, args.min_height, args.conf,
-                                                                val_tail=args.val_tail, model=model)]
+        frames = [
+            f
+            for s in args.seq
+            for f in predict_sequence(
+                s, weights, args.imgsz, args.min_height, args.conf, val_tail=args.val_tail, model=model
+            )
+        ]
         out["models"][label] = {"weights": weights, **pick_conf(frames, args.target_recall, args.max_dist)}
         print(label, out["models"][label])
     path = Path("reports") / "operating_points.json"
@@ -196,14 +229,19 @@ def choose_operating_points(args) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--seq", type=Path, action="append", required=True,
-                    help="sequence folder; repeatable only with --pick-conf")
+    ap.add_argument(
+        "--seq", type=Path, action="append", required=True, help="sequence folder; repeatable only with --pick-conf"
+    )
     ap.add_argument("--model", action="append", required=True, help="label=weights, repeatable")
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--min-height", type=int, default=6, help="same speck filter as carla_to_yolo")
     ap.add_argument("--conf", type=float, default=0.3, help="operating confidence of the pipeline")
-    ap.add_argument("--operating-points", type=Path, default=None,
-                    help="reports/operating_points.json: per-model confidence chosen on validation (overrides --conf)")
+    ap.add_argument(
+        "--operating-points",
+        type=Path,
+        default=None,
+        help="reports/operating_points.json: per-model confidence chosen on validation (overrides --conf)",
+    )
     ap.add_argument("--boot", type=int, default=500)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("reports/detection_eval.json"))
@@ -220,14 +258,24 @@ def main() -> None:
     op = json.loads(args.operating_points.read_text())["models"] if args.operating_points else {}
 
     meta = json.loads((args.seq / "meta.json").read_text())
-    result = {"sequence": args.seq.name, "town": meta["town"], "weather": meta["weather"],
-              "frames": meta["frames"], "classes": CLASSES, "min_height_px": args.min_height, "models": {}}
+    result = {
+        "sequence": args.seq.name,
+        "town": meta["town"],
+        "weather": meta["weather"],
+        "frames": meta["frames"],
+        "classes": CLASSES,
+        "min_height_px": args.min_height,
+        "models": {},
+    }
     for spec in args.model:
         label, weights = spec.split("=", 1)
         conf = op[label]["conf"] if label in op else args.conf
         frames = predict_sequence(args.seq, weights, args.imgsz, args.min_height, conf)
-        result["models"][label] = {"weights": weights, **summarize(frames, args.boot, args.seed, conf),
-                                   "operating_conf_source": "validation" if label in op else "fixed"}
+        result["models"][label] = {
+            "weights": weights,
+            **summarize(frames, args.boot, args.seed, conf),
+            "operating_conf_source": "validation" if label in op else "fixed",
+        }
         print(label, json.dumps(result["models"][label]))
     result["gt_objects"] = {c: int(sum((f["gc"] == i).sum() for f in frames)) for i, c in enumerate(CLASSES)}
     args.out.parent.mkdir(parents=True, exist_ok=True)

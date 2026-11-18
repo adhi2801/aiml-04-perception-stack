@@ -11,6 +11,7 @@ search get the same trial budget, so the README can say how much faster the sear
 Writes reports/falsification.json after every trial (a crash or CARLA timeout loses at most one trial; --resume
 continues from it).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,24 +25,33 @@ import carla
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_scenarios import run_trial  # noqa: E402
+from run_scenarios import run_trial
 
-from perception import falsify as fz  # noqa: E402
-from perception import scenarios as sc  # noqa: E402
-from perception.pipeline import PerceptionPipeline  # noqa: E402
+from perception import falsify as fz
+from perception import scenarios as sc
+from perception.pipeline import PerceptionPipeline
 
 OUT = Path("reports") / "falsification.json"
 
 
 def make_simulator(client, pipe, args, log: list[dict]):
     def simulate(p: dict) -> float:
-        scenario = sc.Scenario("CPNA-search", "pedestrian", side=+1, overlap=p["overlap"], ped_kmh=p["ped_kmh"],
-                               start_offset_m=4.0)
+        scenario = sc.Scenario(
+            "CPNA-search", "pedestrian", side=+1, overlap=p["overlap"], ped_kmh=p["ped_kmh"], start_offset_m=4.0
+        )
         for attempt in range(2):  # CARLA occasionally times out on a reload; one retry, then count it as lost
             try:
-                r = run_trial(client, pipe, args, len(log), p["ego_kmh"], None, scenario=scenario,
-                              conditions={"sun_altitude_deg": p["sun_altitude_deg"], "rain": p["rain"]},
-                              occluded=bool(p["occluded"]))
+                r = run_trial(
+                    client,
+                    pipe,
+                    args,
+                    len(log),
+                    p["ego_kmh"],
+                    None,
+                    scenario=scenario,
+                    conditions={"sun_altitude_deg": p["sun_altitude_deg"], "rain": p["rain"]},
+                    occluded=bool(p["occluded"]),
+                )
                 break
             except RuntimeError as exc:
                 print(f"trial failed ({exc}); retrying" if attempt == 0 else f"trial lost: {exc}")
@@ -51,6 +61,7 @@ def make_simulator(client, pipe, args, log: list[dict]):
         log.append({**p, **r, "margin": m})
         print(json.dumps({k: (round(v, 2) if isinstance(v, float) else v) for k, v in log[-1].items()}))
         return m
+
     return simulate
 
 
@@ -80,21 +91,44 @@ def main() -> None:
     falsifier = fz.Falsifier(make_simulator(client, pipe, args, f_log), n_init=args.n_init, seed=args.seed)
     t0 = time.time()
     f_hist = falsifier.run(args.budget)
-    r_hist = [] if args.skip_random else fz.random_search(make_simulator(client, pipe, args, r_log), args.budget,
-                                                          seed=args.seed)
-    meta = {"weights": args.weights or pipe.cfg["detector"]["weights"], "oracle_depth": args.oracle_depth,
-            "config": args.config, "budget": args.budget, "seed": args.seed, "minutes": round((time.time() - t0) / 60, 1),
-            "trial_details": {"falsifier": f_log, "random": r_log}}
+    r_hist = (
+        []
+        if args.skip_random
+        else fz.random_search(make_simulator(client, pipe, args, r_log), args.budget, seed=args.seed)
+    )
+    meta = {
+        "weights": args.weights or pipe.cfg["detector"]["weights"],
+        "oracle_depth": args.oracle_depth,
+        "config": args.config,
+        "budget": args.budget,
+        "seed": args.seed,
+        "minutes": round((time.time() - t0) / 60, 1),
+        "trial_details": {"falsifier": f_log, "random": r_log},
+    }
     out = fz.save(OUT, f_hist, r_hist or f_hist[:0], meta)
     if f_hist:
         out["boundary"] = {
-            "speed_vs_sun_occluded": fz.boundary_grid(f_hist, fz.SPACE, "ego_kmh", "sun_altitude_deg",
-                                                      {"occluded": 1, "ped_kmh": 5.0, "overlap": 0.25, "rain": 0.0}),
-            "speed_vs_sun_clear_view": fz.boundary_grid(f_hist, fz.SPACE, "ego_kmh", "sun_altitude_deg",
-                                                        {"occluded": 0, "ped_kmh": 5.0, "overlap": 0.25, "rain": 0.0}),
-            "speed_vs_ped_speed": fz.boundary_grid(f_hist, fz.SPACE, "ego_kmh", "ped_kmh",
-                                                   {"occluded": 0, "sun_altitude_deg": 45.0, "overlap": 0.25,
-                                                    "rain": 0.0}),
+            "speed_vs_sun_occluded": fz.boundary_grid(
+                f_hist,
+                fz.SPACE,
+                "ego_kmh",
+                "sun_altitude_deg",
+                {"occluded": 1, "ped_kmh": 5.0, "overlap": 0.25, "rain": 0.0},
+            ),
+            "speed_vs_sun_clear_view": fz.boundary_grid(
+                f_hist,
+                fz.SPACE,
+                "ego_kmh",
+                "sun_altitude_deg",
+                {"occluded": 0, "ped_kmh": 5.0, "overlap": 0.25, "rain": 0.0},
+            ),
+            "speed_vs_ped_speed": fz.boundary_grid(
+                f_hist,
+                fz.SPACE,
+                "ego_kmh",
+                "ped_kmh",
+                {"occluded": 0, "sun_altitude_deg": 45.0, "overlap": 0.25, "rain": 0.0},
+            ),
         }
         OUT.write_text(json.dumps(out, indent=2))
     print(json.dumps({"falsifier": out["falsifier"]["summary"], "random": out["random"]["summary"]}, indent=2)[:3000])

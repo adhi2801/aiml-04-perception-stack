@@ -6,6 +6,7 @@ by least squares against ground-truth depth (CARLA's depth camera gives it for f
 report standard monocular-depth metrics. A second, model-free estimate comes from flat-ground
 geometry, z = f * h / (v_bottom - v_horizon), which is a useful cross-check on distant objects.
 """
+
 from __future__ import annotations
 
 import math
@@ -60,8 +61,9 @@ def focal_px(width: int, fov_deg: float) -> float:
     return width / (2.0 * math.tan(math.radians(fov_deg) / 2.0))
 
 
-def ground_plane_distance(box, img_h: int, img_w: int, fov_deg: float, cam_height_m: float,
-                          horizon_y: float | None = None) -> float | None:
+def ground_plane_distance(
+    box, img_h: int, img_w: int, fov_deg: float, cam_height_m: float, horizon_y: float | None = None
+) -> float | None:
     """Distance from the box's bottom edge, assuming a flat road and a level camera."""
     f = focal_px(img_w, fov_deg)
     v0 = img_h / 2 if horizon_y is None else horizon_y

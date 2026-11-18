@@ -1,4 +1,4 @@
-"""Closed-loop AEB evaluation in CARLA with Euro NCAP-style scenarios (no ROS, for repeatable batch runs and the demo video).
+"""Closed-loop AEB evaluation in CARLA with Euro NCAP-style scenarios (no ROS: repeatable batch runs, demo video).
 
 The ego drives on Traffic Manager autopilot at a fixed test speed and is told to IGNORE pedestrians and vehicles,
 so the only thing that can stop the car is our perception stack. Scenario geometry lives in perception/scenarios.py.
@@ -12,6 +12,7 @@ Per trial we log: collided?, impact speed, minimum gap, time from hazard visible
 Per test speed we report the avoided rate and mean speed reduction (the basis of Euro NCAP's AEB score).
 Writes reports/ncap_<scenario>.json and .md (and logs to W&B if WANDB_API_KEY is set).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,12 +28,21 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from carla_common import (CamSpec, attach_camera, attach_collision, depth_to_meters, get_frame, gt_boxes,  # noqa: E402
-                          rgb_to_bgr, spawn_ego, sync_world)
+from carla_common import (
+    CamSpec,
+    attach_camera,
+    attach_collision,
+    depth_to_meters,
+    get_frame,
+    gt_boxes,
+    rgb_to_bgr,
+    spawn_ego,
+    sync_world,
+)
 
-from perception import scenarios as sc  # noqa: E402
-from perception.fusion.aeb import Action  # noqa: E402
-from perception.pipeline import PerceptionPipeline  # noqa: E402
+from perception import scenarios as sc
+from perception.fusion.aeb import Action
+from perception.pipeline import PerceptionPipeline
 
 
 def ahead(transform: carla.Transform, meters: float, lateral: float = 0.0) -> carla.Location:
@@ -49,17 +59,26 @@ def front_gap(ego, point: carla.Location) -> float:
 
 def set_conditions(world, ego, sun_altitude_deg: float = 45.0, rain: float = 0.0) -> None:
     """Time of day and rain for one trial. Below the horizon the ego drives on its headlights."""
-    world.set_weather(carla.WeatherParameters(
-        sun_altitude_angle=sun_altitude_deg, sun_azimuth_angle=90.0, cloudiness=max(rain, 10.0),
-        precipitation=rain, precipitation_deposits=rain, wetness=rain, fog_density=0.0))
+    world.set_weather(
+        carla.WeatherParameters(
+            sun_altitude_angle=sun_altitude_deg,
+            sun_azimuth_angle=90.0,
+            cloudiness=max(rain, 10.0),
+            precipitation=rain,
+            precipitation_deposits=rain,
+            wetness=rain,
+            fog_density=0.0,
+        )
+    )
     lights = carla.VehicleLightState.Position
     if sun_altitude_deg < 5:
         lights |= carla.VehicleLightState.LowBeam
     ego.set_light_state(carla.VehicleLightState(lights))
 
 
-def setup_hazard(world, actors, ego, scenario, rng: random.Random, tm=None, test_kmh: float | None = None,
-                 occluded: bool = False):
+def setup_hazard(
+    world, actors, ego, scenario, rng: random.Random, tm=None, test_kmh: float | None = None, occluded: bool = False
+):
     """Returns (hazard actor, per-tick function that drives it). `scenario` is a name or a sc.Scenario.
     `tm`/`test_kmh` are only needed for CCRb. `occluded` parks a van at the kerb just before the crossing point, so
     the pedestrian is hidden from the camera until they step out (Euro NCAP's obstructed CPNC variant)."""
@@ -71,15 +90,19 @@ def setup_hazard(world, actors, ego, scenario, rng: random.Random, tm=None, test
         hazard_wp = wp.next(110.0)[0]
         if occluded:
             lane_half = hazard_wp.lane_width / 2
-            van_tf = carla.Transform(ahead(hazard_wp.transform, -5.0, s.side * (lane_half + 1.2)),
-                                     hazard_wp.transform.rotation)
-            van = world.try_spawn_actor(bl.find("vehicle.mercedes.sprinter"), van_tf) or \
-                world.try_spawn_actor(bl.find("vehicle.audi.a2"), van_tf)
+            van_tf = carla.Transform(
+                ahead(hazard_wp.transform, -5.0, s.side * (lane_half + 1.2)), hazard_wp.transform.rotation
+            )
+            van = world.try_spawn_actor(bl.find("vehicle.mercedes.sprinter"), van_tf) or world.try_spawn_actor(
+                bl.find("vehicle.audi.a2"), van_tf
+            )
             if van is not None:
                 van.set_simulate_physics(False)
                 actors.append(van)
-        walker = world.spawn_actor(rng.choice(bl.filter("walker.pedestrian.*")),
-                                   carla.Transform(ahead(hazard_wp.transform, 0, s.side * s.start_offset_m)))
+        walker = world.spawn_actor(
+            rng.choice(bl.filter("walker.pedestrian.*")),
+            carla.Transform(ahead(hazard_wp.transform, 0, s.side * s.start_offset_m)),
+        )
         actors.append(walker)
         direction = hazard_wp.transform.get_right_vector() * (-s.side)
         width = 2 * ego.bounding_box.extent.y
@@ -92,12 +115,15 @@ def setup_hazard(world, actors, ego, scenario, rng: random.Random, tm=None, test
                     state["walking"] = True
             if state["walking"]:
                 walker.apply_control(carla.WalkerControl(direction=direction, speed=s.ped_kmh / 3.6))
+
         return walker, tick
 
     # CCRb: a lead car drives ahead at the test speed, then brakes as hard as it can.
     hazard_wp = wp.next(s.headway_m + 2 * ego.bounding_box.extent.x)[0]
-    lead = world.spawn_actor(bl.find("vehicle.audi.a2"), carla.Transform(
-        hazard_wp.transform.location + carla.Location(z=0.5), hazard_wp.transform.rotation))
+    lead = world.spawn_actor(
+        bl.find("vehicle.audi.a2"),
+        carla.Transform(hazard_wp.transform.location + carla.Location(z=0.5), hazard_wp.transform.rotation),
+    )
     actors.append(lead)
     state = {"steady": 0, "braking": False}
     if tm is not None:
@@ -116,11 +142,21 @@ def setup_hazard(world, actors, ego, scenario, rng: random.Random, tm=None, test
                     lead.set_autopilot(False, tm.get_port())
         if state["braking"]:
             lead.apply_control(carla.VehicleControl(throttle=0.0, brake=1.0))
+
     return lead, tick
 
 
-def run_trial(client, pipe: PerceptionPipeline, args, trial: int, test_kmh: float, writer,
-              scenario=None, conditions: dict | None = None, occluded: bool = False) -> dict:
+def run_trial(
+    client,
+    pipe: PerceptionPipeline,
+    args,
+    trial: int,
+    test_kmh: float,
+    writer,
+    scenario=None,
+    conditions: dict | None = None,
+    occluded: bool = False,
+) -> dict:
     """One closed-loop trial. `scenario` (name or sc.Scenario) defaults to args.scenario; `conditions` are
     set_conditions() keyword arguments (default: clear noon)."""
     rng = random.Random(trial)
@@ -177,16 +213,23 @@ def run_trial(client, pipe: PerceptionPipeline, args, trial: int, test_kmh: floa
             if ego.get_velocity().length() < 0.1 and braking and step > 40:
                 break  # stopped safely
 
-        return {"trial": trial, "test_kmh": test_kmh, "collided": impact_kmh is not None,
-                "impact_kmh": round(impact_kmh, 1) if impact_kmh is not None else 0.0,
-                "min_gap_m": round(min_gap, 2),
-                "reaction_s": round(first_brake - first_visible, 2) if first_brake is not None and first_visible is not None else None,
-                "braked": first_brake is not None, "mean_fps": round(float(np.mean(fps)), 1)}
+        return {
+            "trial": trial,
+            "test_kmh": test_kmh,
+            "collided": impact_kmh is not None,
+            "impact_kmh": round(impact_kmh, 1) if impact_kmh is not None else 0.0,
+            "min_gap_m": round(min_gap, 2),
+            "reaction_s": round(first_brake - first_visible, 2)
+            if first_brake is not None and first_visible is not None
+            else None,
+            "braked": first_brake is not None,
+            "mean_fps": round(float(np.mean(fps)), 1),
+        }
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-  # 127.0.0.1, not localhost: CARLA listens on IPv4 only and localhost can resolve to ::1
+    # 127.0.0.1, not localhost: CARLA listens on IPv4 only and localhost can resolve to ::1
     ap.add_argument("--host", default=os.environ.get("CARLA_HOST", "127.0.0.1"))
     ap.add_argument("--port", type=int, default=2000)
     ap.add_argument("--scenario", choices=[*sc.SCENARIOS, *sc.ALIASES], default="cpna25")
@@ -208,8 +251,9 @@ def main() -> None:
     writer = None
     if args.video:
         args.video.parent.mkdir(parents=True, exist_ok=True)
-        writer = cv2.VideoWriter(str(args.video), cv2.VideoWriter_fourcc(*"mp4v"), args.fps,
-                                 (args.video_w, args.video_w * 9 // 16))
+        writer = cv2.VideoWriter(
+            str(args.video), cv2.VideoWriter_fourcc(*"mp4v"), args.fps, (args.video_w, args.video_w * 9 // 16)
+        )
 
     scenario = sc.get(args.scenario)
     trials = []
@@ -223,15 +267,21 @@ def main() -> None:
 
     reactions = [t["reaction_s"] for t in trials if t["reaction_s"] is not None]
     by_speed = sc.summarize(trials)
-    summary = {"scenario": scenario.name, "trials": len(trials), "oracle_depth": args.oracle_depth,
-               "config": args.config, "weights": args.weights or pipe.cfg["detector"]["weights"],
-               "by_speed": by_speed,
-               "collision_rate": round(sum(t["collided"] for t in trials) / len(trials), 3),
-               "brake_rate": round(sum(t["braked"] for t in trials) / len(trials), 3),
-               "median_min_gap_m": round(float(np.median([t["min_gap_m"] for t in trials])), 2),
-               "median_reaction_s": round(float(np.median(reactions)), 2) if reactions else None,
-               "mean_fps": round(float(np.mean([t["mean_fps"] for t in trials])), 1),
-               "per_trial": trials, "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")}
+    summary = {
+        "scenario": scenario.name,
+        "trials": len(trials),
+        "oracle_depth": args.oracle_depth,
+        "config": args.config,
+        "weights": args.weights or pipe.cfg["detector"]["weights"],
+        "by_speed": by_speed,
+        "collision_rate": round(sum(t["collided"] for t in trials) / len(trials), 3),
+        "brake_rate": round(sum(t["braked"] for t in trials) / len(trials), 3),
+        "median_min_gap_m": round(float(np.median([t["min_gap_m"] for t in trials])), 2),
+        "median_reaction_s": round(float(np.median(reactions)), 2) if reactions else None,
+        "mean_fps": round(float(np.mean([t["mean_fps"] for t in trials])), 1),
+        "per_trial": trials,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
     stem = f"ncap_{sc.ALIASES.get(args.scenario, args.scenario)}{'_oracle' if args.oracle_depth else ''}"
     out = Path("reports") / f"{stem}.json"
     out.parent.mkdir(exist_ok=True)
@@ -243,7 +293,10 @@ def main() -> None:
 
     if os.environ.get("WANDB_API_KEY"):
         import wandb
-        run = wandb.init(project="aiml04-perception", job_type="carla-scenarios", config=vars(args) | {"video": str(args.video)})
+
+        run = wandb.init(
+            project="aiml04-perception", job_type="carla-scenarios", config=vars(args) | {"video": str(args.video)}
+        )
         run.log({k: v for k, v in summary.items() if isinstance(v, (int, float))})
         run.log({"by_speed": wandb.Table(columns=list(by_speed[0]), data=[list(r.values()) for r in by_speed])})
         if args.video:

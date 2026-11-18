@@ -7,6 +7,7 @@
 
 Used identically by the offline video runner, the direct CARLA loop and the ROS2 perception node.
 """
+
 from __future__ import annotations
 
 import time
@@ -24,8 +25,19 @@ from perception.lanes.classical import ClassicalLaneDetector, LaneResult
 COLORS = {Action.CRUISE: (80, 200, 80), Action.WARN: (0, 200, 255), Action.BRAKE: (0, 0, 255)}
 # COCO-pretrained baselines use different names for the classes AEB cares about; normalize to BDD100K names.
 CLASS_ALIASES = {"person": "pedestrian", "motorbike": "motorcycle"}
-DRIVING_CLASSES = {"pedestrian", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle",
-                   "traffic light", "traffic sign", "stop sign"}
+DRIVING_CLASSES = {
+    "pedestrian",
+    "rider",
+    "car",
+    "truck",
+    "bus",
+    "train",
+    "motorcycle",
+    "bicycle",
+    "traffic light",
+    "traffic sign",
+    "stop sign",
+}
 
 
 @dataclass
@@ -38,8 +50,13 @@ class FrameResult:
 
 
 class PerceptionPipeline:
-    def __init__(self, cfg_path: str | Path = "configs/pipeline.yaml", use_depth_model: bool = True,
-                 weights: str | None = None, overrides: dict | None = None):
+    def __init__(
+        self,
+        cfg_path: str | Path = "configs/pipeline.yaml",
+        use_depth_model: bool = True,
+        weights: str | None = None,
+        overrides: dict | None = None,
+    ):
         """overrides: {section: {key: value}} merged over the YAML, e.g. {"camera": {"width": 800, "height": 450}}."""
         from ultralytics import YOLO
 
@@ -57,6 +74,7 @@ class PerceptionPipeline:
         # feeds the same bird's-eye polynomial fit that produces the AEB corridor
         if lcfg.get("source", "classical") == "learned" and Path(lcfg.get("weights", "")).exists():
             from perception.lanes.seg_model import LaneSegmenter
+
             mask_fn = LaneSegmenter(lcfg["weights"])
         self.lane_source = "learned" if mask_fn is not None else "classical"
         self.lanes = ClassicalLaneDetector(self.w, self.h, lcfg["src"], lcfg["smoothing"], mask_fn=mask_fn)
@@ -68,6 +86,7 @@ class PerceptionPipeline:
         self.depth_model = None
         if use_depth_model and self.depth_source == "midas":
             from perception.depth.midas import MiDaS
+
             self.depth_model = MiDaS(dcfg["model"], device=dcfg.get("device"))
         self.depth_scale, self.depth_shift = dcfg.get("scale"), dcfg.get("shift")
 
@@ -77,8 +96,17 @@ class PerceptionPipeline:
         timings = {}
 
         t0 = time.perf_counter()
-        r = self.model.track(bgr, imgsz=det["imgsz"], conf=det["conf"], iou=det["iou"], half=det["half"],
-                             tracker=self.cfg["tracker"], persist=True, device=det.get("device"), verbose=False)[0]
+        r = self.model.track(
+            bgr,
+            imgsz=det["imgsz"],
+            conf=det["conf"],
+            iou=det["iou"],
+            half=det["half"],
+            tracker=self.cfg["tracker"],
+            persist=True,
+            device=det.get("device"),
+            verbose=False,
+        )[0]
         timings["detect_track"] = (time.perf_counter() - t0) * 1000
 
         t0 = time.perf_counter()
@@ -92,13 +120,21 @@ class PerceptionPipeline:
         objects = []
         boxes = r.boxes
         if boxes is not None and boxes.id is not None:
-            for xyxy, cls, conf, tid in zip(boxes.xyxy.cpu().numpy(), boxes.cls.cpu().numpy().astype(int),
-                                            boxes.conf.cpu().numpy(), boxes.id.cpu().numpy().astype(int)):
+            for xyxy, cls, conf, tid in zip(
+                boxes.xyxy.cpu().numpy(),
+                boxes.cls.cpu().numpy().astype(int),
+                boxes.conf.cpu().numpy(),
+                boxes.id.cpu().numpy().astype(int),
+                strict=True,
+            ):
                 if self.names[int(cls)] not in DRIVING_CLASSES:  # COCO baseline also sees cups, benches, ...
                     continue
                 box = tuple(float(v) for v in xyxy)
-                dist = object_distance(depth_m, box) if depth_m is not None else \
-                    ground_plane_distance(box, self.h, self.w, self.fov, self.cam_h)
+                dist = (
+                    object_distance(depth_m, box)
+                    if depth_m is not None
+                    else ground_plane_distance(box, self.h, self.w, self.fov, self.cam_h)
+                )
                 objects.append(TrackedObject(int(tid), self.names[int(cls)], box, dist, float(conf)))
 
         t0 = time.perf_counter()
@@ -124,7 +160,15 @@ class PerceptionPipeline:
         cv2.rectangle(out, (0, 0), (out.shape[1], 40), (0, 0, 0), -1)
         cv2.putText(out, banner, (12, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.9, COLORS[res.action], 2, cv2.LINE_AA)
         fps = 1000 / max(res.timings_ms.get("total", 1), 1e-3)
-        cv2.putText(out, f"{fps:5.1f} FPS  det {res.timings_ms.get('detect_track', 0):.0f}ms  "
-                         f"depth {res.timings_ms.get('depth', 0):.0f}ms  lanes {res.timings_ms.get('lanes', 0):.0f}ms",
-                    (out.shape[1] - 520, 27), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1, cv2.LINE_AA)
+        cv2.putText(
+            out,
+            f"{fps:5.1f} FPS  det {res.timings_ms.get('detect_track', 0):.0f}ms  "
+            f"depth {res.timings_ms.get('depth', 0):.0f}ms  lanes {res.timings_ms.get('lanes', 0):.0f}ms",
+            (out.shape[1] - 520, 27),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (220, 220, 220),
+            1,
+            cv2.LINE_AA,
+        )
         return out

@@ -9,6 +9,7 @@ are picked there. Town02 is then scored once with perception.lanes.evaluate.
 Real-time-oriented choice: ~3M parameters, exports cleanly to ONNX/TensorRT.
 Lane markings are thin (~1-2% of pixels), so the loss is Dice + positively weighted BCE.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,8 +48,9 @@ class LaneFrames(Dataset):
 
     def __getitem__(self, i):
         img = cv2.resize(cv2.imread(str(self.rgb[i])), SIZE, interpolation=cv2.INTER_AREA)
-        mask = cv2.resize(cv2.imread(str(self.seq / "lanes" / (self.rgb[i].stem + ".png")), 0), SIZE,
-                          interpolation=cv2.INTER_NEAREST)
+        mask = cv2.resize(
+            cv2.imread(str(self.seq / "lanes" / (self.rgb[i].stem + ".png")), 0), SIZE, interpolation=cv2.INTER_NEAREST
+        )
         if self.train:
             if np.random.rand() < 0.5:  # lanes are left/right symmetric, unlike chest X-rays
                 img, mask = img[:, ::-1], mask[:, ::-1]
@@ -113,9 +115,13 @@ class LaneSegmenter:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--train", nargs="+", type=Path, required=True)
-    ap.add_argument("--val", nargs="+", type=Path,
-                    help="separate validation sequences; default: the last --val-frac of each --train sequence. "
-                         "Never pass the test town here.")
+    ap.add_argument(
+        "--val",
+        nargs="+",
+        type=Path,
+        help="separate validation sequences; default: the last --val-frac of each --train sequence. "
+        "Never pass the test town here.",
+    )
     ap.add_argument("--val-frac", type=float, default=0.15)
     ap.add_argument("--epochs", type=int, default=25)
     ap.add_argument("--batch", type=int, default=8)
@@ -126,9 +132,19 @@ def main() -> None:
     torch.backends.cudnn.benchmark = True  # fixed input size
     # persistent workers: on Windows every epoch would otherwise re-spawn 4 processes that each re-import torch
     train_part = "all" if args.val else "train"
-    val_sets = [LaneFrames(d, False) for d in args.val] if args.val else         [LaneFrames(d, False, "val", args.val_frac) for d in args.train]
-    train = DataLoader(ConcatDataset([LaneFrames(d, True, train_part, args.val_frac) for d in args.train]), args.batch,
-                       shuffle=True, num_workers=4, drop_last=True, persistent_workers=True)
+    val_sets = (
+        [LaneFrames(d, False) for d in args.val]
+        if args.val
+        else [LaneFrames(d, False, "val", args.val_frac) for d in args.train]
+    )
+    train = DataLoader(
+        ConcatDataset([LaneFrames(d, True, train_part, args.val_frac) for d in args.train]),
+        args.batch,
+        shuffle=True,
+        num_workers=4,
+        drop_last=True,
+        persistent_workers=True,
+    )
     # validation runs for seconds per epoch: 2 workers, not kept alive (4 persistent ones held ~4 GB of commit)
     val = DataLoader(ConcatDataset(val_sets), args.batch, num_workers=2)
     model = build().to(device)
@@ -138,7 +154,12 @@ def main() -> None:
     run = None
     if os.environ.get("WANDB_API_KEY"):
         import wandb
-        run = wandb.init(project="aiml04-perception", job_type="lane-seg", config=vars(args) | {"train": [str(p) for p in args.train]})
+
+        run = wandb.init(
+            project="aiml04-perception",
+            job_type="lane-seg",
+            config=vars(args) | {"train": [str(p) for p in args.train]},
+        )
 
     best = -1.0
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -166,19 +187,33 @@ def main() -> None:
         f1s = 2 * counts[:, 0] / np.maximum(2 * counts[:, 0] + counts[:, 1] + counts[:, 2], 1)
         k = int(np.argmax(f1s))
         f1, thr = float(f1s[k]), THRESHOLDS[k]
-        rec = {"epoch": epoch, "loss": loss.item(), "val_pixel_f1": round(f1, 4), "threshold": thr,
-               "epoch_sec": round(time.time() - t0, 1)}
+        rec = {
+            "epoch": epoch,
+            "loss": loss.item(),
+            "val_pixel_f1": round(f1, 4),
+            "threshold": thr,
+            "epoch_sec": round(time.time() - t0, 1),
+        }
         print(json.dumps(rec))
         if run:
             run.log(rec)
         if f1 > best:
             best = f1
             torch.save(model.state_dict(), args.out)
-            args.out.with_suffix(".json").write_text(json.dumps({
-                "threshold": thr, "epoch": epoch, "val_pixel_f1": round(f1, 4),
-                "train": [p.name for p in args.train],
-                "val": [p.name for p in args.val] if args.val else f"last {args.val_frac:.0%} of each training sequence"},
-                indent=2))
+            args.out.with_suffix(".json").write_text(
+                json.dumps(
+                    {
+                        "threshold": thr,
+                        "epoch": epoch,
+                        "val_pixel_f1": round(f1, 4),
+                        "train": [p.name for p in args.train],
+                        "val": [p.name for p in args.val]
+                        if args.val
+                        else f"last {args.val_frac:.0%} of each training sequence",
+                    },
+                    indent=2,
+                )
+            )
     if run:
         run.summary["best_val_pixel_f1"] = best
         run.finish()

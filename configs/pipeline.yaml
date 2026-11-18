@@ -6,7 +6,7 @@ camera:
   mount_height_m: 1.5          # used by the ground-plane distance estimate
 
 detector:
-  weights: models/yolo11s_bdd.engine   # .pt | .onnx | .engine (TensorRT) - same API for all
+  weights: models/yolo11s_carla.engine # .pt | .onnx | .engine (TensorRT) - same API for all
   imgsz: 640
   conf: 0.30
   iou: 0.5

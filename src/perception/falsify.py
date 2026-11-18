@@ -16,11 +16,12 @@ same budget is run by the caller, so "the search finds failures faster" is measu
 
 Pure numpy and no CARLA, so the search itself is unit-tested in CI on synthetic simulators.
 """
+
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import numpy as np
 
@@ -30,7 +31,7 @@ class Param:
     name: str
     low: float
     high: float
-    integer: bool = False     # e.g. occluded 0/1; rounded after scaling
+    integer: bool = False  # e.g. occluded 0/1; rounded after scaling
 
     def scale(self, u: float) -> float:
         v = self.low + float(u) * (self.high - self.low)
@@ -42,14 +43,14 @@ SPACE = [
     Param("ego_kmh", 15.0, 50.0),
     Param("ped_kmh", 3.0, 10.0),
     Param("overlap", 0.1, 0.9),
-    Param("sun_altitude_deg", -10.0, 60.0),   # < 0: night (headlights only)
-    Param("rain", 0.0, 80.0),                 # CARLA precipitation and wetness, %
-    Param("occluded", 0, 1, integer=True),    # a parked car hides the pedestrian until they step out
+    Param("sun_altitude_deg", -10.0, 60.0),  # < 0: night (headlights only)
+    Param("rain", 0.0, 80.0),  # CARLA precipitation and wetness, %
+    Param("occluded", 0, 1, integer=True),  # a parked car hides the pedestrian until they step out
 ]
 
 
 def to_params(u: np.ndarray, space: list[Param] = SPACE) -> dict:
-    return {p.name: p.scale(x) for p, x in zip(space, u)}
+    return {p.name: p.scale(x) for p, x in zip(space, u, strict=True)}
 
 
 def latin_hypercube(n: int, d: int, rng: np.random.Generator) -> np.ndarray:
@@ -71,7 +72,7 @@ class GP:
     LENGTHS = (0.1, 0.15, 0.25, 0.4, 0.6)
     NOISES = (1e-4, 1e-2, 0.05, 0.2)
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "GP":
+    def fit(self, X: np.ndarray, y: np.ndarray) -> GP:
         self.X = np.asarray(X, float)
         self.mu_y, self.sd_y = float(np.mean(y)), float(np.std(y)) or 1.0
         z = (np.asarray(y, float) - self.mu_y) / self.sd_y
@@ -93,19 +94,19 @@ class GP:
     @staticmethod
     def _k(A: np.ndarray, B: np.ndarray, ls: float) -> np.ndarray:
         d2 = ((A[:, None, :] - B[None, :, :]) ** 2).sum(-1)
-        return np.exp(-0.5 * d2 / ls ** 2)
+        return np.exp(-0.5 * d2 / ls**2)
 
     def predict(self, Xs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         Ks = self._k(np.asarray(Xs, float), self.X, self.ls)
         mu = Ks @ self.alpha
         v = np.linalg.solve(self.L, Ks.T)
-        var = np.clip(1.0 - (v ** 2).sum(0), 1e-12, None)
+        var = np.clip(1.0 - (v**2).sum(0), 1e-12, None)
         return mu * self.sd_y + self.mu_y, np.sqrt(var) * self.sd_y
 
 
 @dataclass
 class Falsifier:
-    simulate: Callable[[dict], float]          # scenario parameters -> safety margin
+    simulate: Callable[[dict], float]  # scenario parameters -> safety margin
     space: list[Param] = field(default_factory=lambda: list(SPACE))
     n_init: int = 12
     candidates: int = 4000
@@ -121,8 +122,13 @@ class Falsifier:
 
     def _run(self, u: np.ndarray, how: str) -> dict:
         params = to_params(u, self.space)
-        rec = {"trial": len(self.history), "how": how, "u": [round(float(x), 5) for x in u], "params": params,
-               "margin": float(self.simulate(params))}
+        rec = {
+            "trial": len(self.history),
+            "how": how,
+            "u": [round(float(x), 5) for x in u],
+            "params": params,
+            "margin": float(self.simulate(params)),
+        }
         self.history.append(rec)
         return rec
 
@@ -150,15 +156,23 @@ class Falsifier:
         return self.history
 
 
-def random_search(simulate: Callable[[dict], float], budget: int, space: list[Param] = SPACE,
-                  seed: int = 0) -> list[dict]:
+def random_search(
+    simulate: Callable[[dict], float], budget: int, space: list[Param] = SPACE, seed: int = 0
+) -> list[dict]:
     rng = np.random.default_rng(seed + 10_000)
     out = []
     for t in range(budget):
         u = rng.random(len(space))
         params = to_params(u, space)
-        out.append({"trial": t, "how": "random", "u": [round(float(x), 5) for x in u], "params": params,
-                    "margin": float(simulate(params))})
+        out.append(
+            {
+                "trial": t,
+                "how": "random",
+                "u": [round(float(x), 5) for x in u],
+                "params": params,
+                "margin": float(simulate(params)),
+            }
+        )
     return out
 
 
@@ -166,14 +180,19 @@ def summary(history: list[dict]) -> dict:
     m = np.array([h["margin"] for h in history])
     fails = np.where(m < 0)[0]
     worst = int(np.argmin(m))
-    return {"trials": int(len(m)), "failures": int(len(fails)), "failure_rate": round(float(len(fails) / len(m)), 3),
-            "first_failure_trial": int(fails[0]) if len(fails) else None,
-            "worst": {"margin": round(float(m[worst]), 2), "params": history[worst]["params"]},
-            "failures_found_by_trial": np.cumsum(m < 0).astype(int).tolist()}
+    return {
+        "trials": len(m),
+        "failures": len(fails),
+        "failure_rate": round(float(len(fails) / len(m)), 3),
+        "first_failure_trial": int(fails[0]) if len(fails) else None,
+        "worst": {"margin": round(float(m[worst]), 2), "params": history[worst]["params"]},
+        "failures_found_by_trial": np.cumsum(m < 0).astype(int).tolist(),
+    }
 
 
-def boundary_grid(history: list[dict], space: list[Param], x: str, y: str, fixed: dict | None = None,
-                  n: int = 60) -> dict:
+def boundary_grid(
+    history: list[dict], space: list[Param], x: str, y: str, fixed: dict | None = None, n: int = 60
+) -> dict:
     """GP-predicted P(failure) on a 2-D slice (x, y) with the other parameters at `fixed` (default: mid-range,
     occluded=0). P(failure) = P(margin < 0) = Phi(-mu / sigma)."""
     from math import erf, sqrt
@@ -189,15 +208,25 @@ def boundary_grid(history: list[dict], space: list[Param], x: str, y: str, fixed
     U[:, names.index(x)] = np.repeat(gx, n)
     U[:, names.index(y)] = np.tile(gy, n)
     mu, sd = gp.predict(U)
-    pfail = np.array([0.5 * (1 + erf(-a / (b * sqrt(2)))) for a, b in zip(mu, sd)]).reshape(n, n)
+    pfail = np.array([0.5 * (1 + erf(-a / (b * sqrt(2)))) for a, b in zip(mu, sd, strict=True)]).reshape(n, n)
     px, py = space[names.index(x)], space[names.index(y)]
-    return {"x": x, "y": y, "x_values": [px.scale(v) for v in gx], "y_values": [py.scale(v) for v in gy],
-            "p_fail": np.round(pfail, 4).tolist(), "fixed": fixed or {"occluded": 0}}
+    return {
+        "x": x,
+        "y": y,
+        "x_values": [px.scale(v) for v in gx],
+        "y_values": [py.scale(v) for v in gy],
+        "p_fail": np.round(pfail, 4).tolist(),
+        "fixed": fixed or {"occluded": 0},
+    }
 
 
 def save(path, falsifier: list[dict], random: list[dict], extra: dict | None = None) -> dict:
-    out = {"space": [vars(p) for p in SPACE], "falsifier": {"summary": summary(falsifier), "trials": falsifier},
-           "random": {"summary": summary(random), "trials": random}, **(extra or {})}
+    out = {
+        "space": [vars(p) for p in SPACE],
+        "falsifier": {"summary": summary(falsifier), "trials": falsifier},
+        "random": {"summary": summary(random), "trials": random},
+        **(extra or {}),
+    }
     with open(path, "w") as f:
         json.dump(out, f, indent=2)
     return out
