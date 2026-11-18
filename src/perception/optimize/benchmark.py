@@ -55,7 +55,19 @@ def time_model(model, imgs: list[np.ndarray], imgsz: int, half: bool, device: st
         "fps": round(1000 / mean, 1),
         "model_p50_ms": _pct(infer, 50),
         "model_p95_ms": _pct(infer, 95),
+        "p50_spread_ms": block_spread(e2e),
     }
+
+
+def block_spread(lat: list[float], blocks: int = 5) -> list[float]:
+    """Lowest and highest p50 over consecutive blocks of the timed runs.
+
+    A laptop CPU changes clock speed with heat and power, so one p50 can look precise while a rerun differs by 2x
+    (seen here: PyTorch on the CPU measured 331 ms, then 170 ms). A wide spread flags a number that is not stable.
+    """
+    parts = [p for p in np.array_split(np.asarray(lat), blocks) if len(p)]
+    p50s = [float(np.percentile(p, 50)) for p in parts]
+    return [round(min(p50s), 2), round(max(p50s), 2)]
 
 
 def environment(device_name: str) -> dict:
@@ -79,7 +91,27 @@ def environment(device_name: str) -> dict:
     return env
 
 
-def resolve_variants(weights: Path, imgsz: int, data: str, allow_export: bool, cpu: bool) -> list[tuple]:
+def ort_cuda_active(onnx: Path) -> bool:
+    """True only if ONNX Runtime really runs this model on CUDA.
+
+    `get_available_providers()` lists CUDA even when its DLLs fail to load; the session then silently runs on the
+    CPU (seen here: onnxruntime-gpu 1.31 wants CUDA 13, torch ships CUDA 12, and the "CUDA" row timed 188 ms, the
+    same as the CPU row). So open a real session and look at the providers it ended up with.
+    """
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return False
+    if hasattr(ort, "preload_dlls"):
+        ort.preload_dlls()
+    ort.set_default_logger_severity(4)
+    session = ort.InferenceSession(str(onnx), providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+    return session.get_providers()[0] == "CUDAExecutionProvider"
+
+
+def resolve_variants(
+    weights: Path, imgsz: int, data: str, allow_export: bool, cpu: bool, cuda_check=ort_cuda_active
+) -> list[tuple]:
     """(name, path, half, device) for every runtime whose file exists (or, with --export, can be exported)."""
     onnx = weights.with_suffix(".onnx")
     fp16 = weights.with_suffix(".engine")
@@ -100,7 +132,9 @@ def resolve_variants(weights: Path, imgsz: int, data: str, allow_export: bool, c
         ("TensorRT FP16", fp16, True),
         ("TensorRT INT8", int8, False),
     ):
-        if path.exists():
+        if path.exists() and name.startswith("ONNX") and not cuda_check(path):
+            print(f"skip {name}: ONNX Runtime fell back to the CPU (CUDA provider failed to load)")
+        elif path.exists():
             out.append((name, path, half, "0"))
         else:
             print(f"skip {name}: {path} not found (build it with scripts/build_trt.py, or pass --export)")

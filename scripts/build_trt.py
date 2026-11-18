@@ -111,8 +111,41 @@ def onnx_metadata(path: Path) -> dict:
     return {p.key: p.value for p in m.metadata_props}
 
 
+def keep_fp16(network, patterns: list[str]) -> int:
+    """Pin every layer whose name contains one of `patterns` to FP16 (mixed precision); returns how many."""
+    compute = {
+        trt.LayerType.CONVOLUTION,
+        trt.LayerType.ACTIVATION,
+        trt.LayerType.ELEMENTWISE,
+        trt.LayerType.MATRIX_MULTIPLY,
+        trt.LayerType.SOFTMAX,
+        trt.LayerType.POOLING,
+        trt.LayerType.CONCATENATION,
+    }
+    pinned = 0
+    for i in range(network.num_layers):
+        layer = network.get_layer(i)
+        # Only math layers with float outputs: shape bookkeeping (Int64 constants, Shape, Gather) cannot be FP16.
+        is_float = all(layer.get_output_type(j) in (trt.float32, trt.float16) for j in range(layer.num_outputs))
+        if layer.type in compute and is_float and any(p in layer.name for p in patterns):
+            layer.precision = trt.float16
+            for j in range(layer.num_outputs):
+                if layer.get_output_type(j) == trt.float32:
+                    layer.set_output_type(j, trt.float16)
+            pinned += 1
+    return pinned
+
+
 def build(
-    onnx_path: Path, out: Path, int8: bool, calib_dir: Path | None, n_calib: int, batch: int, workspace_gb: float
+    onnx_path: Path,
+    out: Path,
+    int8: bool,
+    calib_dir: Path | None,
+    n_calib: int,
+    batch: int,
+    workspace_gb: float,
+    fp16_layers: list[str] | None = None,
+    calib_cache: Path | None = None,
 ) -> Path:
     builder = trt.Builder(LOGGER)
     network = builder.create_network(0)
@@ -130,7 +163,14 @@ def build(
         n = len(images) // batch * batch
         print(f"INT8 calibration on {n} validation images from {calib_dir}")
         config.set_flag(trt.BuilderFlag.INT8)
-        config.int8_calibrator = Calibrator(images[:n], size, batch, out.with_suffix(".calib"))
+        config.int8_calibrator = Calibrator(images[:n], size, batch, calib_cache or out.with_suffix(".calib"))
+        if fp16_layers:
+            # Mixed precision: the layers named here stay FP16, the rest may run INT8.
+            config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
+            pinned = keep_fp16(network, fp16_layers)
+            if pinned == 0:  # e.g. Git Bash rewrote "/model.23/" into a Windows path
+                raise SystemExit(f"--fp16-layers {fp16_layers} matched no layer; nothing would stay FP16")
+            print(f"keeping {pinned} of {network.num_layers} layers in FP16 ({', '.join(fp16_layers)})")
         # the calibrator feeds a fixed batch; build the profile for it and for batch-1 inference
         if network.get_input(0).shape[0] == -1:
             raise SystemExit("export the ONNX with a fixed batch (dynamic=False)")
@@ -155,9 +195,27 @@ def main() -> None:
     ap.add_argument("--calib-images", type=int, default=400)
     ap.add_argument("--calib-batch", type=int, default=1)
     ap.add_argument("--workspace-gb", type=float, default=1.0)
+    ap.add_argument(
+        "--fp16-layers",
+        nargs="+",
+        help="with --int8: keep layers whose name contains any of these in FP16, e.g. /model.23/ (YOLO11 head)",
+    )
     args = ap.parse_args()
-    out = args.onnx.with_name(args.onnx.stem + ("_int8" if args.int8 else "") + ".engine")
-    build(args.onnx, out, args.int8, args.calib, args.calib_images, args.calib_batch, args.workspace_gb)
+    suffix = ("_int8" if args.int8 else "") + ("_mixed" if args.int8 and args.fp16_layers else "")
+    out = args.onnx.with_name(args.onnx.stem + suffix + ".engine")
+    # The calibration scales do not depend on which layers stay FP16, so a mixed build reuses the INT8 cache.
+    cache = args.onnx.with_name(args.onnx.stem + "_int8.calib") if args.int8 else None
+    build(
+        args.onnx,
+        out,
+        args.int8,
+        args.calib,
+        args.calib_images,
+        args.calib_batch,
+        args.workspace_gb,
+        args.fp16_layers,
+        cache,
+    )
 
 
 if __name__ == "__main__":

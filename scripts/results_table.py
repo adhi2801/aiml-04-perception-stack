@@ -61,6 +61,12 @@ def detection() -> list[str]:
     return rows
 
 
+def spread(r: dict) -> str:
+    """Range of per-block p50s, shown only when it is wider than 10 % (an unstable number must look unstable)."""
+    lo, hi = r.get("p50_spread_ms", (None, None))
+    return f" ({lo}–{hi})" if lo is not None and hi > 1.1 * lo else ""
+
+
 def benchmark() -> list[str]:
     b = load("benchmark.json")
     if not b:
@@ -76,7 +82,8 @@ def benchmark() -> list[str]:
     for r in b["rows"]:
         speedup = r.get("speedup_vs_pytorch_gpu", r.get("speedup_vs_pytorch"))
         rows.append(
-            f"| {r['variant']} | {r['size_mb']} | {r['p50_ms']} | {r['p95_ms']} | {r.get('model_p50_ms', '–')} | "
+            f"| {r['variant']} | {r['size_mb']} | {r['p50_ms']}{spread(r)} | {r['p95_ms']} | "
+            f"{r.get('model_p50_ms', '–')} | "
             f"{r['fps']} | {speedup}× | {r['map50_95']:.3f} | {-r['map_drop_pts']:+.2f} |"
         )
     versions = ", ".join(
@@ -85,11 +92,36 @@ def benchmark() -> list[str]:
     rows += [
         "",
         "End-to-end = what the pipeline pays per frame (preprocess + model + NMS); model only = the network alone. "
+        "A range after the p50 = lowest–highest p50 over five consecutive blocks of runs, shown when the clock "
+        "speed changed during the run (laptop CPUs throttle with heat). "
         "Speed-up is against PyTorch FP32 on the GPU. Accuracy on the CARLA val split, never the test town. "
         + (f"Driver {env['nvidia_driver']}; {versions}. " if "nvidia_driver" in env else "")
         + "Source: `reports/benchmark.json`.",
         "",
     ]
+    return rows
+
+
+def precision() -> list[str]:
+    d = load("precision_report.json")
+    if not d:
+        return []
+    models = list(d["map50_95"])
+    classes = list(d["instances"])
+    rows = [
+        "### Where quantisation loses accuracy: val mAP50-95 per class",
+        "",
+        "| Class (val boxes) | " + " | ".join(models) + " |",
+        "|---|" + "---|" * len(models),
+    ]
+    for c in classes:
+        cells = []
+        for m in models:
+            v = d["per_class_map50_95"][m].get(c)
+            drop = d["per_class_drop_pts"].get(m, {}).get(c)
+            cells.append("–" if v is None else f"{v:.3f}" + (f" ({-drop:+.1f})" if drop else ""))
+        rows.append(f"| {c} ({d['instances'][c]}) | " + " | ".join(cells) + " |")
+    rows += ["", "In brackets: mAP points against the first column. Source: `reports/precision_report.json`.", ""]
     return rows
 
 
@@ -213,7 +245,7 @@ def ncap() -> list[str]:
 
 def render() -> str:
     body = [START, ""]
-    for part in (detection, benchmark, tracking, lanes, depth, ncap):
+    for part in (detection, benchmark, precision, tracking, lanes, depth, ncap):
         body += part()
     body.append(END)
     return "\n".join(body)
