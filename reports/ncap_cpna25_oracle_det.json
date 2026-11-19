@@ -1,0 +1,129 @@
+{
+  "scenario": "CPNA-25",
+  "trials": 9,
+  "oracle_depth": false,
+  "oracle_detection": true,
+  "config": "configs\\pipeline_lowvram.yaml",
+  "weights": "models\\yolo11s_carla.pt",
+  "by_speed": [
+    {
+      "test_kmh": 20.0,
+      "trials": 3,
+      "avoided_rate": 1.0,
+      "mean_impact_kmh": 0.0,
+      "mean_speed_reduction_kmh": 20.0
+    },
+    {
+      "test_kmh": 30.0,
+      "trials": 3,
+      "avoided_rate": 1.0,
+      "mean_impact_kmh": 0.0,
+      "mean_speed_reduction_kmh": 30.0
+    },
+    {
+      "test_kmh": 40.0,
+      "trials": 3,
+      "avoided_rate": 1.0,
+      "mean_impact_kmh": 0.0,
+      "mean_speed_reduction_kmh": 40.0
+    }
+  ],
+  "collision_rate": 0.0,
+  "brake_rate": 1.0,
+  "median_min_gap_m": 4.7,
+  "median_reaction_s": 4.2,
+  "mean_fps": 74.3,
+  "per_trial": [
+    {
+      "trial": 0,
+      "test_kmh": 20.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 5.1,
+      "reaction_s": 6.75,
+      "braked": true,
+      "mean_fps": 75.8
+    },
+    {
+      "trial": 1,
+      "test_kmh": 20.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 5.08,
+      "reaction_s": 6.75,
+      "braked": true,
+      "mean_fps": 76.1
+    },
+    {
+      "trial": 2,
+      "test_kmh": 20.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 5.69,
+      "reaction_s": 6.65,
+      "braked": true,
+      "mean_fps": 71.0
+    },
+    {
+      "trial": 0,
+      "test_kmh": 30.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 4.66,
+      "reaction_s": 4.2,
+      "braked": true,
+      "mean_fps": 77.5
+    },
+    {
+      "trial": 1,
+      "test_kmh": 30.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 5.03,
+      "reaction_s": 4.15,
+      "braked": true,
+      "mean_fps": 73.6
+    },
+    {
+      "trial": 2,
+      "test_kmh": 30.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 4.7,
+      "reaction_s": 4.2,
+      "braked": true,
+      "mean_fps": 70.7
+    },
+    {
+      "trial": 0,
+      "test_kmh": 40.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 1.19,
+      "reaction_s": 3.15,
+      "braked": true,
+      "mean_fps": 72.7
+    },
+    {
+      "trial": 1,
+      "test_kmh": 40.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 2.16,
+      "reaction_s": 3.05,
+      "braked": true,
+      "mean_fps": 78.1
+    },
+    {
+      "trial": 2,
+      "test_kmh": 40.0,
+      "collided": false,
+      "impact_kmh": 0.0,
+      "min_gap_m": 2.3,
+      "reaction_s": 3.0,
+      "braked": true,
+      "mean_fps": 72.8
+    }
+  ],
+  "timestamp": "2026-11-19 20:56:39"
+}

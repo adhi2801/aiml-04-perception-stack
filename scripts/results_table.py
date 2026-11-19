@@ -301,8 +301,8 @@ def ncap() -> list[str]:
         "### Closed loop in CARLA: does the car stop? (Euro NCAP-style)",
         "",
         "| Scenario | Detector | Test speed | Trials | Avoided | Mean impact speed | Mean speed reduction | "
-        "Median TTC at first brake (s) |",
-        "|---|---|---|---|---|---|---|---|",
+        "Median stopping margin (m) | Median TTC at first brake (s) |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for f in files:
         s = json.loads(f.read_text())
@@ -315,14 +315,18 @@ def ncap() -> list[str]:
                 if t["test_kmh"] == r["test_kmh"] and t.get("ttc_at_brake_s") is not None
             ]
             med = f"{statistics.median(ttc):.2f}" if ttc else "–"
+            gaps = [t["min_gap_m"] for t in s["per_trial"] if t["test_kmh"] == r["test_kmh"] and not t["collided"]]
+            margin = f"{statistics.median(gaps):.2f}" if gaps else "–"
             rows.append(
                 f"| {name} | `{Path(s['weights']).name}` | {r['test_kmh']:g} km/h | {r['trials']} | "
                 f"**{r['avoided_rate']:.0%}** | {r['mean_impact_kmh']:.1f} km/h | "
-                f"{r['mean_speed_reduction_kmh']:.1f} km/h | {med} |"
+                f"{r['mean_speed_reduction_kmh']:.1f} km/h | {margin} | {med} |"
             )
     rows += [
         "",
-        "Reaction = time from the hazard first being visible in the camera to the first BRAKE command. "
+        "Stopping margin = closest the ego's front bumper came to the hazard, over trials that avoided it. "
+        "TTC at first brake = true gap at the first BRAKE command over the ego speed then (– = run before this "
+        "metric existed). Oracle rows replace that stage with the simulator's ground truth. "
         "Source: `reports/ncap_*.json`.",
         "",
     ]

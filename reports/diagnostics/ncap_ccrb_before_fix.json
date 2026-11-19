@@ -1,0 +1,92 @@
+{
+  "scenario": "CCRb",
+  "trials": 6,
+  "oracle_depth": false,
+  "oracle_detection": false,
+  "config": "configs\\pipeline_lowvram.yaml",
+  "weights": "models\\yolo11s_carla.pt",
+  "by_speed": [
+    {
+      "test_kmh": 30.0,
+      "trials": 3,
+      "avoided_rate": 0.0,
+      "mean_impact_kmh": 29.1,
+      "mean_speed_reduction_kmh": 0.9
+    },
+    {
+      "test_kmh": 40.0,
+      "trials": 3,
+      "avoided_rate": 0.0,
+      "mean_impact_kmh": 40.6,
+      "mean_speed_reduction_kmh": -0.6
+    }
+  ],
+  "collision_rate": 1.0,
+  "brake_rate": 1.0,
+  "median_min_gap_m": 1.82,
+  "median_reaction_s": 0.1,
+  "mean_fps": 8.6,
+  "per_trial": [
+    {
+      "trial": 0,
+      "test_kmh": 30.0,
+      "collided": true,
+      "impact_kmh": 29.9,
+      "min_gap_m": 1.82,
+      "reaction_s": 0.1,
+      "braked": true,
+      "mean_fps": 8.4
+    },
+    {
+      "trial": 1,
+      "test_kmh": 30.0,
+      "collided": true,
+      "impact_kmh": 28.8,
+      "min_gap_m": 1.82,
+      "reaction_s": 0.7,
+      "braked": true,
+      "mean_fps": 8.3
+    },
+    {
+      "trial": 2,
+      "test_kmh": 30.0,
+      "collided": true,
+      "impact_kmh": 28.6,
+      "min_gap_m": 1.86,
+      "reaction_s": 0.1,
+      "braked": true,
+      "mean_fps": 8.7
+    },
+    {
+      "trial": 0,
+      "test_kmh": 40.0,
+      "collided": true,
+      "impact_kmh": 37.5,
+      "min_gap_m": 1.81,
+      "reaction_s": 0.1,
+      "braked": true,
+      "mean_fps": 8.9
+    },
+    {
+      "trial": 1,
+      "test_kmh": 40.0,
+      "collided": true,
+      "impact_kmh": 46.5,
+      "min_gap_m": 1.85,
+      "reaction_s": 0.7,
+      "braked": true,
+      "mean_fps": 8.6
+    },
+    {
+      "trial": 2,
+      "test_kmh": 40.0,
+      "collided": true,
+      "impact_kmh": 37.9,
+      "min_gap_m": 1.81,
+      "reaction_s": 0.1,
+      "braked": true,
+      "mean_fps": 8.5
+    }
+  ],
+  "timestamp": "2026-11-19 20:46:29"
+}

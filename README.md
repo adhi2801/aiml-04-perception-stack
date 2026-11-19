@@ -111,7 +111,27 @@ Epoch and threshold chosen on the held-out last 15 % of each training town, neve
 
 Source: `reports/depth_eval.json`.
 
-*Closed-loop scenarios: not run yet (`carla_tools/run_scenarios.py`).*
+### Closed loop in CARLA: does the car stop? (Euro NCAP-style)
+
+| Scenario | Detector | Test speed | Trials | Avoided | Mean impact speed | Mean speed reduction | Median stopping margin (m) | Median TTC at first brake (s) |
+|---|---|---|---|---|---|---|---|---|
+| CPFA-50 | `yolo11s_carla.pt` | 20 km/h | 3 | **100%** | 0.0 km/h | 20.0 km/h | 3.70 | – |
+| CPFA-50 | `yolo11s_carla.pt` | 30 km/h | 3 | **100%** | 0.0 km/h | 30.0 km/h | 2.65 | – |
+| CPFA-50 | `yolo11s_carla.pt` | 40 km/h | 3 | **100%** | 0.0 km/h | 40.0 km/h | 1.53 | – |
+| CPNA-25 | `yolo11s_carla.pt` | 20 km/h | 3 | **100%** | 0.0 km/h | 20.0 km/h | 4.85 | – |
+| CPNA-25 | `yolo11s_carla.pt` | 30 km/h | 3 | **100%** | 0.0 km/h | 30.0 km/h | 4.70 | – |
+| CPNA-25 | `yolo11s_carla.pt` | 40 km/h | 3 | **100%** | 0.0 km/h | 40.0 km/h | 1.56 | – |
+| CPNA-25 (oracle detection + depth) | `yolo11s_carla.pt` | 20 km/h | 3 | **100%** | 0.0 km/h | 20.0 km/h | 7.91 | – |
+| CPNA-25 (oracle detection + depth) | `yolo11s_carla.pt` | 30 km/h | 3 | **100%** | 0.0 km/h | 30.0 km/h | 9.24 | – |
+| CPNA-25 (oracle detection + depth) | `yolo11s_carla.pt` | 40 km/h | 3 | **100%** | 0.0 km/h | 40.0 km/h | 10.57 | – |
+| CPNA-25 (oracle depth) | `yolo11s_carla.pt` | 20 km/h | 3 | **100%** | 0.0 km/h | 20.0 km/h | 7.91 | – |
+| CPNA-25 (oracle depth) | `yolo11s_carla.pt` | 30 km/h | 3 | **100%** | 0.0 km/h | 30.0 km/h | 9.24 | – |
+| CPNA-25 (oracle depth) | `yolo11s_carla.pt` | 40 km/h | 3 | **100%** | 0.0 km/h | 40.0 km/h | 10.54 | – |
+| CPNA-25 (oracle detection) | `yolo11s_carla.pt` | 20 km/h | 3 | **100%** | 0.0 km/h | 20.0 km/h | 5.10 | – |
+| CPNA-25 (oracle detection) | `yolo11s_carla.pt` | 30 km/h | 3 | **100%** | 0.0 km/h | 30.0 km/h | 4.70 | – |
+| CPNA-25 (oracle detection) | `yolo11s_carla.pt` | 40 km/h | 3 | **100%** | 0.0 km/h | 40.0 km/h | 2.16 | – |
+
+Stopping margin = closest the ego's front bumper came to the hazard, over trials that avoided it. TTC at first brake = true gap at the first BRAKE command over the ego speed then (– = run before this metric existed). Oracle rows replace that stage with the simulator's ground truth. Source: `reports/ncap_*.json`.
 
 <!-- results:end -->
 
@@ -209,4 +229,4 @@ below 0.5 on the test town. The fine-tuned detector raises mAP but generalises w
 confidence chosen on validation it keeps 0.86 pedestrian recall within 30 m there, but only 0.53 on the unseen town
 (0.02 at 30–50 m), and pedestrians are what the AEB needs most. Validation frames come from the training towns, so
 they overstate generalisation; a held-out validation town is the fix. The AEB has no notion of object heading or velocity vectors (it only uses the
-closing speed along the line of sight). This is a research prototype, not a safety-certified system.
+closing speed along the line of sight). **CCRb (braking lead car) is not in the closed-loop table because it currently fails:** all 6 trials hit the lead car at close to the test speed although a brake was logged, which points to a stage or harness fault rather than a tuning issue. The raw run is kept in `reports/diagnostics/ncap_ccrb_before_fix.json`, and `carla_tools/trace_scenario.py` traces it frame by frame (perception vs simulator truth, with and without oracle detection/depth) to find the stage at fault. This is a research prototype, not a safety-certified system.
