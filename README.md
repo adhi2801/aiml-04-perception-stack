@@ -42,7 +42,30 @@ Ground truth from the simulator (1696 pedestrian and 1161 vehicle boxes). Classe
 
 Recall is at the pipeline's operating confidence (0.3), IoU ≥ 0.5. Source: `reports/detection_eval.json`.
 
-*Runtime benchmark: not run yet (`python -m perception.optimize.benchmark`).*
+### Runtime: NVIDIA GeForce GTX 1650, 640×640, batch 1
+
+| Variant | Size (MB) | p50 end-to-end (ms) | p95 (ms) | p50 model only (ms) | FPS | Speed-up | val mAP50-95 | mAP change (pts) |
+|---|---|---|---|---|---|---|---|---|
+| PyTorch FP32 | 18.3 | 14.65 (14.47–17.75) | 22.58 | 11.22 | 61.6 | 1.0× | 0.740 | ref |
+| ONNX Runtime FP32 (CUDA) | 36.2 | 23.26 | 26.27 | 18.71 | 42.0 | 0.68× | 0.737 | -0.27 |
+| TensorRT FP16 | 21.4 | 11.86 (11.11–12.26) | 14.15 | 7.3 | 82.7 | 1.34× | 0.733 | -0.65 |
+| TensorRT INT8 (entropy calibration) | 11.9 | 10.36 (10.12–11.2) | 13.3 | 5.06 | 93.3 | 1.51× | 0.683 | -5.65 |
+| TensorRT INT8 (MinMax calibration) | 12.2 | 7.88 | 9.86 | 4.23 | 122.0 | 1.98× | 0.717 | -2.29 |
+| PyTorch FP32 (CPU) | 18.3 | 71.09 | 80.96 | 68.05 | 13.7 | 0.22× | 0.740 | ref |
+| ONNX Runtime FP32 (CPU) | 36.2 | 158.67 | 192.29 | 152.75 | 6.2 | 0.1× | 0.737 | -0.27 |
+
+End-to-end = what the pipeline pays per frame (preprocess + model + NMS); model only = the network alone. A range after the p50 = lowest–highest p50 over five consecutive blocks of runs, shown when the clock speed changed during the run (laptop CPUs throttle with heat). Speed-up is against PyTorch FP32 on the GPU. Accuracy on the CARLA val split, never the test town. Driver 610.91; tensorrt-cu12 10.16.1.11, onnxruntime-gpu 1.22.0, torch 2.6.0+cu124, ultralytics 8.4.193. Source: `reports/benchmark.json`.
+
+### Where quantisation loses accuracy: val mAP50-95 per class
+
+| Class (val boxes) | fp32 | fp16 | int8_entropy | int8_minmax |
+|---|---|---|---|---|
+| pedestrian (258) | 0.250 | 0.249 (-0.2) | 0.179 (-7.1) | 0.236 (-1.4) |
+| car (731) | 0.870 | 0.865 (-0.5) | 0.795 (-7.4) | 0.867 (-0.2) |
+| truck (90) | 0.843 | 0.824 (-2.0) | 0.762 (-8.1) | 0.781 (-6.2) |
+| bus (90) | 0.995 | 0.995 | 0.995 | 0.982 (-1.3) |
+
+In brackets: mAP points against the first column. Source: `reports/precision_report.json`.
 
 ### Tracking: unseen test town (same detections for both trackers)
 

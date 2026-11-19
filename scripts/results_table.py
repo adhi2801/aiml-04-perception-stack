@@ -81,10 +81,12 @@ def benchmark() -> list[str]:
     ]
     for r in b["rows"]:
         speedup = r.get("speedup_vs_pytorch_gpu", r.get("speedup_vs_pytorch"))
+        # The FP32 weights are the reference, so they show "ref" rather than a meaningless -0.00.
+        change = "ref" if r["map_drop_pts"] == 0 else f"{-r['map_drop_pts']:+.2f}"
         rows.append(
             f"| {r['variant']} | {r['size_mb']} | {r['p50_ms']}{spread(r)} | {r['p95_ms']} | "
             f"{r.get('model_p50_ms', '–')} | "
-            f"{r['fps']} | {speedup}× | {r['map50_95']:.3f} | {-r['map_drop_pts']:+.2f} |"
+            f"{r['fps']} | {speedup}× | {r['map50_95']:.3f} | {change} |"
         )
     versions = ", ".join(
         f"{k} {env[k]}" for k in ("tensorrt-cu12", "onnxruntime-gpu", "torch", "ultralytics") if k in env

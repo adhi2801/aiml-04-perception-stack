@@ -6,11 +6,13 @@ OpenCV and onnx, and writes engines that Ultralytics loads directly (same metada
 pipeline use them unchanged.
 
   python scripts/build_trt.py --onnx models/yolo11s_carla.onnx                     # FP16 -> models/yolo11s_carla.engine
-  python scripts/build_trt.py --onnx models/yolo11s_carla.onnx --int8 \
-      --calib data/carla_yolo/images/val                                           # INT8 -> ..._int8.engine
+  python scripts/build_trt.py --onnx models/yolo11s_carla.onnx --int8                     # -> ..._int8.engine
+  python scripts/build_trt.py --onnx models/yolo11s_carla.onnx --int8 --calibrator minmax # -> ..._int8_minmax.engine
 
-INT8 calibration uses entropy calibration on validation images (never the test town), preprocessed exactly like
-Ultralytics (letterbox to 640, pad 114, RGB, /255).
+INT8 calibration runs on TRAINING images (never val, which scores the engines, and never the test town),
+preprocessed exactly like Ultralytics (letterbox to 640, pad 114, RGB, /255). Two calibrators: entropy (TensorRT's
+default, picks clipping ranges that minimise KL divergence) and minmax (keeps the full observed range, so rare
+large activations are not clipped).
 """
 
 from __future__ import annotations
@@ -72,9 +74,8 @@ class CudaRT:
             raise RuntimeError(f"{what} failed with CUDA error {code}")
 
 
-class Calibrator(trt.IInt8EntropyCalibrator2):
-    def __init__(self, images: list[Path], size: int, batch: int, cache: Path):
-        super().__init__()
+class _CalibratorMixin:
+    def _setup(self, images: list[Path], size: int, batch: int, cache: Path) -> None:
         self.images, self.size, self.batch, self.cache = images, size, batch, cache
         self.cuda = CudaRT()
         self.buf = self.cuda.malloc(batch * 3 * size * size * 4)
@@ -102,6 +103,29 @@ class Calibrator(trt.IInt8EntropyCalibrator2):
     def __del__(self):
         with contextlib.suppress(Exception):
             self.cuda.free(self.buf)
+
+
+class EntropyCalibrator(_CalibratorMixin, trt.IInt8EntropyCalibrator2):
+    def __init__(self, images: list[Path], size: int, batch: int, cache: Path):
+        trt.IInt8EntropyCalibrator2.__init__(self)
+        self._setup(images, size, batch, cache)
+
+
+class MinMaxCalibrator(_CalibratorMixin, trt.IInt8MinMaxCalibrator):
+    def __init__(self, images: list[Path], size: int, batch: int, cache: Path):
+        trt.IInt8MinMaxCalibrator.__init__(self)
+        self._setup(images, size, batch, cache)
+
+
+CALIBRATORS = {"entropy": EntropyCalibrator, "minmax": MinMaxCalibrator}
+
+
+def engine_name(stem: str, int8: bool, calibrator: str, mixed: bool) -> str:
+    """<stem>[_int8[_minmax][_mixed]].engine; entropy keeps the plain _int8 name."""
+    if not int8:
+        return stem + ".engine"
+    method = "" if calibrator == "entropy" else f"_{calibrator}"
+    return stem + "_int8" + method + ("_mixed" if mixed else "") + ".engine"
 
 
 def onnx_metadata(path: Path) -> dict:
@@ -146,6 +170,7 @@ def build(
     workspace_gb: float,
     fp16_layers: list[str] | None = None,
     calib_cache: Path | None = None,
+    calibrator: str = "entropy",
 ) -> Path:
     builder = trt.Builder(LOGGER)
     network = builder.create_network(0)
@@ -161,9 +186,10 @@ def build(
         rng = np.random.default_rng(0)
         images = [images[i] for i in sorted(rng.choice(len(images), min(n_calib, len(images)), replace=False))]
         n = len(images) // batch * batch
-        print(f"INT8 calibration on {n} validation images from {calib_dir}")
+        print(f"INT8 {calibrator} calibration on {n} images from {calib_dir}")
         config.set_flag(trt.BuilderFlag.INT8)
-        config.int8_calibrator = Calibrator(images[:n], size, batch, calib_cache or out.with_suffix(".calib"))
+        cache = calib_cache or out.with_suffix(".calib")
+        config.int8_calibrator = CALIBRATORS[calibrator](images[:n], size, batch, cache)
         if fp16_layers:
             # Mixed precision: the layers named here stay FP16, the rest may run INT8.
             config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
@@ -191,7 +217,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--onnx", type=Path, required=True)
     ap.add_argument("--int8", action="store_true")
-    ap.add_argument("--calib", type=Path, default=Path("data/carla_yolo/images/val"))
+    ap.add_argument("--calib", type=Path, default=Path("data/carla_yolo/images/train"))
+    ap.add_argument("--calibrator", choices=sorted(CALIBRATORS), default="entropy")
     ap.add_argument("--calib-images", type=int, default=400)
     ap.add_argument("--calib-batch", type=int, default=1)
     ap.add_argument("--workspace-gb", type=float, default=1.0)
@@ -201,10 +228,11 @@ def main() -> None:
         help="with --int8: keep layers whose name contains any of these in FP16, e.g. /model.23/ (YOLO11 head)",
     )
     args = ap.parse_args()
-    suffix = ("_int8" if args.int8 else "") + ("_mixed" if args.int8 and args.fp16_layers else "")
-    out = args.onnx.with_name(args.onnx.stem + suffix + ".engine")
-    # The calibration scales do not depend on which layers stay FP16, so a mixed build reuses the INT8 cache.
-    cache = args.onnx.with_name(args.onnx.stem + "_int8.calib") if args.int8 else None
+    if args.int8 and "val" in args.calib.parts:
+        raise SystemExit("calibrate on training images: val is what the engines are scored on")
+    out = args.onnx.with_name(engine_name(args.onnx.stem, args.int8, args.calibrator, bool(args.fp16_layers)))
+    # The scales depend only on the calibrator and images, so a mixed build reuses the plain INT8 build's cache.
+    cache = args.onnx.with_name(f"{args.onnx.stem}_int8_{args.calibrator}.calib") if args.int8 else None
     build(
         args.onnx,
         out,
@@ -215,6 +243,7 @@ def main() -> None:
         args.workspace_gb,
         args.fp16_layers,
         cache,
+        args.calibrator,
     )
 
 

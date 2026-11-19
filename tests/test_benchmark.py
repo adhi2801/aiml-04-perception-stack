@@ -46,7 +46,7 @@ def test_engines_next_to_the_weights_are_found(tmp_path: Path):
         ("PyTorch FP32", "det.pt", False),
         ("ONNX Runtime FP32 (CUDA)", "det.onnx", False),
         ("TensorRT FP16", "det.engine", True),
-        ("TensorRT INT8", "det_int8.engine", False),
+        ("TensorRT INT8 (entropy calibration)", "det_int8.engine", False),
     ]
 
 

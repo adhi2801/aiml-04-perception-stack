@@ -1,0 +1,61 @@
+{
+  "split": "val (held-out tail of each training town)",
+  "instances": {
+    "pedestrian": 258,
+    "car": 731,
+    "truck": 90,
+    "bus": 90
+  },
+  "map50_95": {
+    "fp32": 0.7395,
+    "fp16": 0.733,
+    "int8_entropy": 0.683,
+    "int8_minmax": 0.7166
+  },
+  "per_class_map50_95": {
+    "fp32": {
+      "pedestrian": 0.2503,
+      "car": 0.8695,
+      "truck": 0.8433,
+      "bus": 0.995
+    },
+    "fp16": {
+      "pedestrian": 0.2486,
+      "car": 0.8649,
+      "truck": 0.8237,
+      "bus": 0.995
+    },
+    "int8_entropy": {
+      "pedestrian": 0.1794,
+      "car": 0.7954,
+      "truck": 0.7623,
+      "bus": 0.995
+    },
+    "int8_minmax": {
+      "pedestrian": 0.236,
+      "car": 0.867,
+      "truck": 0.781,
+      "bus": 0.9821
+    }
+  },
+  "per_class_drop_pts": {
+    "fp16": {
+      "pedestrian": 0.17,
+      "car": 0.46,
+      "truck": 1.96,
+      "bus": 0.0
+    },
+    "int8_entropy": {
+      "pedestrian": 7.09,
+      "car": 7.41,
+      "truck": 8.1,
+      "bus": 0.0
+    },
+    "int8_minmax": {
+      "pedestrian": 1.43,
+      "car": 0.25,
+      "truck": 6.23,
+      "bus": 1.29
+    }
+  }
+}

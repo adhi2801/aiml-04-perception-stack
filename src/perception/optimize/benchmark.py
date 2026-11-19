@@ -116,6 +116,8 @@ def resolve_variants(
     onnx = weights.with_suffix(".onnx")
     fp16 = weights.with_suffix(".engine")
     int8 = weights.with_name(weights.stem + "_int8.engine")
+    minmax = weights.with_name(weights.stem + "_int8_minmax.engine")  # build_trt.py --int8 --calibrator minmax
+    mixed = weights.with_name(weights.stem + "_int8_mixed.engine")  # build_trt.py --int8 --fp16-layers /model.23/
     if allow_export:
         from ultralytics import YOLO
 
@@ -130,7 +132,9 @@ def resolve_variants(
     for name, path, half in (
         ("ONNX Runtime FP32 (CUDA)", onnx, False),
         ("TensorRT FP16", fp16, True),
-        ("TensorRT INT8", int8, False),
+        ("TensorRT INT8 (entropy calibration)", int8, False),
+        ("TensorRT INT8 (MinMax calibration)", minmax, False),
+        ("TensorRT INT8 + FP16 head", mixed, False),
     ):
         if path.exists() and name.startswith("ONNX") and not cuda_check(path):
             print(f"skip {name}: ONNX Runtime fell back to the CPU (CUDA provider failed to load)")
