@@ -205,7 +205,8 @@ python -m pytest     # AEB rules, TTC, depth calibration math, ground-plane geom
 ## Limitations
 MiDaS depth degrades beyond ~20 m, so flat-ground geometry is the default; it assumes a flat road and will fail on
 hills. Everything is measured in simulation only: there is no real-world (sim-to-real) result yet. Tracking recall is
-below 0.5 on the test town, and the tracker comparison was made on that town, not on a separate validation town.
-The fine-tuned detector raises mAP but misses more pedestrians at its operating confidence, which is what the AEB
-needs most; the threshold is being re-chosen on validation frames (`eval_detection`). The AEB has no notion of object heading or velocity vectors (it only uses the
+below 0.5 on the test town. The fine-tuned detector raises mAP but generalises worse for pedestrians: at the
+confidence chosen on validation it keeps 0.86 pedestrian recall within 30 m there, but only 0.53 on the unseen town
+(0.02 at 30–50 m), and pedestrians are what the AEB needs most. Validation frames come from the training towns, so
+they overstate generalisation; a held-out validation town is the fix. The AEB has no notion of object heading or velocity vectors (it only uses the
 closing speed along the line of sight). This is a research prototype, not a safety-certified system.
