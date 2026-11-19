@@ -8,11 +8,11 @@ camera:
 detector:
   weights: models/yolo11s_carla.engine # .pt | .onnx | .engine (TensorRT) - same API for all
   imgsz: 640
-  conf: 0.30
+  conf: 0.31                   # chosen on validation frames: reports/operating_points.json
   iou: 0.5
   half: true
 
-tracker: bytetrack.yaml        # ultralytics built-in ByteTrack config
+tracker: configs/trackers/botsort_nogmc.yaml  # chosen on validation (IDF1 within a 10 ms p95 budget): reports/tracker_choice.json
 
 depth:
   source: ground_plane         # ground_plane | midas (see reports/depth_eval.json)

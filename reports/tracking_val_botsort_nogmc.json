@@ -1,0 +1,95 @@
+{
+  "Town01_sunset": {
+    "mota": 1.0,
+    "motp": 0.03484127910035337,
+    "idf1": 1.0,
+    "num_switches": 0.0,
+    "mostly_tracked": 1.0,
+    "mostly_lost": 0.0,
+    "num_false_positives": 0.0,
+    "num_misses": 0.0,
+    "precision": 1.0,
+    "recall": 1.0
+  },
+  "Town03_clear": {
+    "mota": 0.7735849056603774,
+    "motp": 0.08303129451841873,
+    "idf1": 0.8683937823834197,
+    "num_switches": 5.0,
+    "mostly_tracked": 4.0,
+    "mostly_lost": 2.0,
+    "num_false_positives": 10.0,
+    "num_misses": 105.0,
+    "precision": 0.9770114942528736,
+    "recall": 0.8018867924528302
+  },
+  "Town03_rain": {
+    "mota": 0.8095238095238095,
+    "motp": 0.25345253547705565,
+    "idf1": 0.8947368421052632,
+    "num_switches": 0.0,
+    "mostly_tracked": 1.0,
+    "mostly_lost": 0.0,
+    "num_false_positives": 0.0,
+    "num_misses": 4.0,
+    "precision": 1.0,
+    "recall": 0.8095238095238095
+  },
+  "Town04_cloudy": {
+    "mota": 1.0,
+    "motp": 0.037736135774202054,
+    "idf1": 1.0,
+    "num_switches": 0.0,
+    "mostly_tracked": 2.0,
+    "mostly_lost": 0.0,
+    "num_false_positives": 0.0,
+    "num_misses": 0.0,
+    "precision": 1.0,
+    "recall": 1.0
+  },
+  "Town05_wet": {
+    "mota": 0.6666666666666667,
+    "motp": 0.11955148938989421,
+    "idf1": 0.8021978021978022,
+    "num_switches": 0.0,
+    "mostly_tracked": 2.0,
+    "mostly_lost": 7.0,
+    "num_false_positives": 2.0,
+    "num_misses": 70.0,
+    "precision": 0.9864864864864865,
+    "recall": 0.6759259259259259
+  },
+  "OVERALL": {
+    "mota": 0.81099324975892,
+    "motp": 0.07806495370949958,
+    "idf1": 0.8935500786575773,
+    "num_switches": 5.0,
+    "mostly_tracked": 10.0,
+    "mostly_lost": 9.0,
+    "num_false_positives": 12.0,
+    "num_misses": 179.0,
+    "precision": 0.9862068965517241,
+    "recall": 0.8273866923818708
+  },
+  "_meta": {
+    "weights": "models/yolo11s_carla.pt",
+    "tracker": "configs/trackers/botsort_nogmc.yaml",
+    "conf": 0.31,
+    "conf_source": "validation",
+    "min_height": 20,
+    "val_tail": 0.15,
+    "sequences": [
+      "Town01_sunset",
+      "Town03_clear",
+      "Town03_rain",
+      "Town04_cloudy",
+      "Town05_wet"
+    ],
+    "association_ms": {
+      "p50": 1.77,
+      "p95": 5.22,
+      "frames": 445,
+      "note": "per-frame time of the tracker step alone (track() minus Ultralytics pre/infer/NMS times)"
+    }
+  }
+}

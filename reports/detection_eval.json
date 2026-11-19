@@ -25,19 +25,19 @@
         "pedestrian": 0.1839,
         "vehicle": 0.2493
       },
-      "operating_conf": 0.3,
+      "operating_conf": 0.05,
       "recall_by_distance": {
         "pedestrian": {
           "0-15m": {
-            "recall": 0.832,
+            "recall": 0.861,
             "n": 375
           },
           "15-30m": {
-            "recall": 0.528,
+            "recall": 0.681,
             "n": 705
           },
           "30-50m": {
-            "recall": 0.084,
+            "recall": 0.248,
             "n": 592
           },
           "50m+": {
@@ -47,23 +47,24 @@
         },
         "vehicle": {
           "0-15m": {
-            "recall": 0.804,
+            "recall": 0.806,
             "n": 372
           },
           "15-30m": {
-            "recall": 0.6,
+            "recall": 0.68,
             "n": 350
           },
           "30-50m": {
-            "recall": 0.465,
+            "recall": 0.659,
             "n": 346
           },
           "50m+": {
-            "recall": 0.237,
+            "recall": 0.645,
             "n": 93
           }
         }
-      }
+      },
+      "operating_conf_source": "validation"
     },
     "carla": {
       "weights": "models/yolo11s_carla.pt",
@@ -81,7 +82,7 @@
         "pedestrian": 0.2446,
         "vehicle": 0.434
       },
-      "operating_conf": 0.3,
+      "operating_conf": 0.31,
       "recall_by_distance": {
         "pedestrian": {
           "0-15m": {
@@ -89,11 +90,11 @@
             "n": 375
           },
           "15-30m": {
-            "recall": 0.407,
+            "recall": 0.403,
             "n": 705
           },
           "30-50m": {
-            "recall": 0.019,
+            "recall": 0.017,
             "n": 592
           },
           "50m+": {
@@ -103,7 +104,7 @@
         },
         "vehicle": {
           "0-15m": {
-            "recall": 0.884,
+            "recall": 0.882,
             "n": 372
           },
           "15-30m": {
@@ -111,7 +112,7 @@
             "n": 350
           },
           "30-50m": {
-            "recall": 0.413,
+            "recall": 0.396,
             "n": 346
           },
           "50m+": {
@@ -119,7 +120,8 @@
             "n": 93
           }
         }
-      }
+      },
+      "operating_conf_source": "validation"
     }
   },
   "gt_objects": {

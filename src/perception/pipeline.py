@@ -1,6 +1,6 @@
 """The full perception stack for one camera frame:
 
-    YOLO (PyTorch / ONNX / TensorRT) + ByteTrack -> tracked boxes
+    YOLO (PyTorch / ONNX / TensorRT) + BoT-SORT (chosen on validation; ByteTrack also supported) -> tracked boxes
     MiDaS (+ metric calibration) or ground-plane geometry -> distance per object
     classical lane detector -> ego corridor
     AEB -> CRUISE / WARN / BRAKE
@@ -49,6 +49,11 @@ class FrameResult:
     timings_ms: dict = field(default_factory=dict)
 
 
+def oracle_boxes(gt_objects: list[dict]) -> list[tuple[int, str, tuple, float]]:
+    """Simulator ground truth as perfect detections: the actor id is a perfect track id, confidence is 1."""
+    return [(int(o["id"]), o["cls"], tuple(float(v) for v in o["box"]), 1.0) for o in gt_objects]
+
+
 class PerceptionPipeline:
     def __init__(
         self,
@@ -90,10 +95,22 @@ class PerceptionPipeline:
             self.depth_model = MiDaS(dcfg["model"], device=dcfg.get("device"))
         self.depth_scale, self.depth_shift = dcfg.get("scale"), dcfg.get("shift")
 
-    def __call__(self, bgr: np.ndarray, t: float | None = None, gt_depth: np.ndarray | None = None) -> FrameResult:
+    def __call__(
+        self,
+        bgr: np.ndarray,
+        t: float | None = None,
+        gt_depth: np.ndarray | None = None,
+        gt_objects: list[dict] | None = None,
+    ) -> FrameResult:
+        """gt_depth: the simulator's depth map instead of the depth estimate (oracle depth).
+        gt_objects: the simulator's visible actors ({id, cls, box}) instead of detector + tracker (oracle detection).
+        Each oracle replaces one stage with the truth, so closed-loop failures can be attributed to the stage that
+        caused them."""
         t = time.monotonic() if t is None else t
         det = self.cfg["detector"]
         timings = {}
+        if gt_objects is not None:
+            return self._finish(bgr, t, timings, gt_depth, oracle_boxes(gt_objects))
 
         t0 = time.perf_counter()
         r = self.model.track(
@@ -109,15 +126,7 @@ class PerceptionPipeline:
         )[0]
         timings["detect_track"] = (time.perf_counter() - t0) * 1000
 
-        t0 = time.perf_counter()
-        depth_m = None
-        if gt_depth is not None:
-            depth_m = gt_depth  # oracle mode: isolates detection/AEB errors from depth errors
-        elif self.depth_source == "midas" and self.depth_model is not None and self.depth_scale is not None:
-            depth_m = to_metric(self.depth_model(bgr), self.depth_scale, self.depth_shift)
-        timings["depth"] = (time.perf_counter() - t0) * 1000
-
-        objects = []
+        dets = []
         boxes = r.boxes
         if boxes is not None and boxes.id is not None:
             for xyxy, cls, conf, tid in zip(
@@ -129,13 +138,34 @@ class PerceptionPipeline:
             ):
                 if self.names[int(cls)] not in DRIVING_CLASSES:  # COCO baseline also sees cups, benches, ...
                     continue
-                box = tuple(float(v) for v in xyxy)
-                dist = (
-                    object_distance(depth_m, box)
-                    if depth_m is not None
-                    else ground_plane_distance(box, self.h, self.w, self.fov, self.cam_h)
-                )
-                objects.append(TrackedObject(int(tid), self.names[int(cls)], box, dist, float(conf)))
+                dets.append((int(tid), self.names[int(cls)], tuple(float(v) for v in xyxy), float(conf)))
+        return self._finish(bgr, t, timings, gt_depth, dets)
+
+    def _finish(
+        self,
+        bgr: np.ndarray,
+        t: float,
+        timings: dict,
+        gt_depth: np.ndarray | None,
+        dets: list[tuple[int, str, tuple, float]],
+    ) -> FrameResult:
+        """Distance per detection, lanes and the AEB decision: the same code whether the boxes are real or oracle."""
+        t0 = time.perf_counter()
+        depth_m = None
+        if gt_depth is not None:
+            depth_m = gt_depth  # oracle mode: isolates detection/AEB errors from depth errors
+        elif self.depth_source == "midas" and self.depth_model is not None and self.depth_scale is not None:
+            depth_m = to_metric(self.depth_model(bgr), self.depth_scale, self.depth_shift)
+        timings["depth"] = (time.perf_counter() - t0) * 1000
+
+        objects = []
+        for tid, cls, box, conf in dets:
+            dist = (
+                object_distance(depth_m, box)
+                if depth_m is not None
+                else ground_plane_distance(box, self.h, self.w, self.fov, self.cam_h)
+            )
+            objects.append(TrackedObject(tid, cls, box, dist, conf))
 
         t0 = time.perf_counter()
         lanes = self.lanes(bgr)

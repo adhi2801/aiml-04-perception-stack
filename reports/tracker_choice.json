@@ -1,0 +1,34 @@
+{
+  "chosen": "botsort_nogmc.yaml",
+  "criterion": "highest overall IDF1 on validation frames (ties: fewer ID switches) among trackers with a per-frame step p95 <= 10.0 ms",
+  "budget_added_after_first_run": true,
+  "best_ignoring_budget": "botsort.yaml",
+  "idf1": {
+    "bytetrack.yaml": 0.8824,
+    "botsort.yaml": 0.9082,
+    "botsort_nogmc.yaml": 0.8936
+  },
+  "mota": {
+    "bytetrack.yaml": 0.8014,
+    "botsort.yaml": 0.838,
+    "botsort_nogmc.yaml": 0.811
+  },
+  "id_switches": {
+    "bytetrack.yaml": 6,
+    "botsort.yaml": 6,
+    "botsort_nogmc.yaml": 5
+  },
+  "step_p95_ms": {
+    "bytetrack.yaml": 15.62,
+    "botsort.yaml": 47.81,
+    "botsort_nogmc.yaml": 5.22
+  },
+  "sequences": [
+    "Town01_sunset",
+    "Town03_clear",
+    "Town03_rain",
+    "Town04_cloudy",
+    "Town05_wet"
+  ],
+  "conf": 0.31
+}

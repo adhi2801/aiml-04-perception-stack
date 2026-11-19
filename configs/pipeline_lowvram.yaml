@@ -9,12 +9,12 @@ camera:
 detector:
   weights: yolo11n.pt          # COCO baseline on CPU (a TensorRT .engine only runs on the GPU); swap in models/yolo11s_carla.pt (CARLA fine-tune) when not comparing against COCO
   imgsz: 640
-  conf: 0.30
+  conf: 0.31                   # chosen on validation frames: reports/operating_points.json
   iou: 0.5
   half: true                   # ignored on CPU
   device: cpu                  # CARLA needs the 4 GB card to itself; omit to use the GPU
 
-tracker: bytetrack.yaml        # ultralytics built-in ByteTrack config
+tracker: configs/trackers/botsort_nogmc.yaml  # chosen on validation (IDF1 within a 10 ms p95 budget): reports/tracker_choice.json
 
 depth:
   source: ground_plane         # ground_plane | midas (see reports/depth_eval.json)

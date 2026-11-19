@@ -7,6 +7,8 @@ so the only thing that can stop the car is our perception stack. Scenario geomet
   python carla_tools/run_scenarios.py --scenario cpfa50 --speeds 20,30,40 --trials 5
   python carla_tools/run_scenarios.py --scenario ccrb --speeds 30,40 --trials 5
   python carla_tools/run_scenarios.py --scenario cpna25 --oracle-depth   # perfect depth: isolates the depth error
+  python carla_tools/run_scenarios.py --scenario cpna25 --oracle-detection   # perfect boxes: isolates detection
+  (both flags: perfect perception, so what is left is the AEB logic and the vehicle's braking)
 
 Per trial we log: collided?, impact speed, minimum gap, time from hazard visible to first BRAKE, and FPS.
 Per test speed we report the avoided rate and mean speed reduction (the basis of Euro NCAP's AEB score).
@@ -187,10 +189,16 @@ def run_trial(
             hazard_tick(step)
             bgr = rgb_to_bgr(get_frame(rgb_q, frame))
             depth = depth_to_meters(get_frame(depth_q, frame))
-            res = pipe(bgr, t=t, gt_depth=depth if args.oracle_depth else None)
+            visible = gt_boxes(world, rgb_cam, ego, spec, depth)
+            res = pipe(
+                bgr,
+                t=t,
+                gt_depth=depth if args.oracle_depth else None,
+                gt_objects=visible if getattr(args, "oracle_detection", False) else None,
+            )
             fps.append(1000 / max(res.timings_ms["total"], 1e-3))
 
-            if first_visible is None and any(g["id"] == hazard.id for g in gt_boxes(world, rgb_cam, ego, spec, depth)):
+            if first_visible is None and any(g["id"] == hazard.id for g in visible):
                 first_visible = t
             if res.action == Action.BRAKE:
                 first_brake = t if first_brake is None else first_brake
@@ -227,6 +235,12 @@ def run_trial(
         }
 
 
+def oracle_suffix(args) -> str:
+    """Report-name suffix for the ablation condition: which stages were replaced by the simulator's truth."""
+    det, dep = getattr(args, "oracle_detection", False), args.oracle_depth
+    return "_oracle_both" if det and dep else "_oracle_det" if det else "_oracle_depth" if dep else ""
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     # 127.0.0.1, not localhost: CARLA listens on IPv4 only and localhost can resolve to ::1
@@ -238,7 +252,8 @@ def main() -> None:
     ap.add_argument("--seconds", type=float, default=30)
     ap.add_argument("--fps", type=float, default=20)
     ap.add_argument("--spawn", type=int, default=0)
-    ap.add_argument("--oracle-depth", action="store_true")
+    ap.add_argument("--oracle-depth", action="store_true", help="simulator depth instead of the estimate")
+    ap.add_argument("--oracle-detection", action="store_true", help="simulator boxes instead of detector + tracker")
     ap.add_argument("--config", default="configs/pipeline.yaml")
     ap.add_argument("--weights", help="override detector weights, e.g. yolo11s.pt (COCO baseline)")
     ap.add_argument("--video", type=Path)
@@ -271,6 +286,7 @@ def main() -> None:
         "scenario": scenario.name,
         "trials": len(trials),
         "oracle_depth": args.oracle_depth,
+        "oracle_detection": args.oracle_detection,
         "config": args.config,
         "weights": args.weights or pipe.cfg["detector"]["weights"],
         "by_speed": by_speed,
@@ -282,11 +298,19 @@ def main() -> None:
         "per_trial": trials,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
-    stem = f"ncap_{sc.ALIASES.get(args.scenario, args.scenario)}{'_oracle' if args.oracle_depth else ''}"
+    stem = f"ncap_{sc.ALIASES.get(args.scenario, args.scenario)}{oracle_suffix(args)}"
     out = Path("reports") / f"{stem}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(summary, indent=2))
-    title = scenario.name + (" (oracle depth)" if args.oracle_depth else "")
+    title = (
+        scenario.name
+        + {
+            "": "",
+            "_oracle_depth": " (oracle depth)",
+            "_oracle_det": " (oracle detection)",
+            "_oracle_both": " (oracle detection + depth)",
+        }[oracle_suffix(args)]
+    )
     out.with_suffix(".md").write_text(sc.to_markdown(title, by_speed))
     print(sc.to_markdown(title, by_speed))
     print(json.dumps({k: v for k, v in summary.items() if k not in ("per_trial", "by_speed")}, indent=2))

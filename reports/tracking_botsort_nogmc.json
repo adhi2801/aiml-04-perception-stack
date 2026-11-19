@@ -1,0 +1,43 @@
+{
+  "Town02_test": {
+    "mota": 0.32662835249042144,
+    "motp": 0.19289655672983902,
+    "idf1": 0.46238030095759236,
+    "num_switches": 70.0,
+    "mostly_tracked": 8.0,
+    "mostly_lost": 45.0,
+    "num_false_positives": 42.0,
+    "num_misses": 1294.0,
+    "precision": 0.9497607655502392,
+    "recall": 0.38026819923371646
+  },
+  "OVERALL": {
+    "mota": 0.32662835249042144,
+    "motp": 0.19289655672983902,
+    "idf1": 0.46238030095759236,
+    "num_switches": 70.0,
+    "mostly_tracked": 8.0,
+    "mostly_lost": 45.0,
+    "num_false_positives": 42.0,
+    "num_misses": 1294.0,
+    "precision": 0.9497607655502392,
+    "recall": 0.38026819923371646
+  },
+  "_meta": {
+    "weights": "models/yolo11s_carla.pt",
+    "tracker": "configs/trackers/botsort_nogmc.yaml",
+    "conf": 0.31,
+    "conf_source": "validation",
+    "min_height": 20,
+    "val_tail": null,
+    "sequences": [
+      "Town02_test"
+    ],
+    "association_ms": {
+      "p50": 1.26,
+      "p95": 2.13,
+      "frames": 599,
+      "note": "per-frame time of the tracker step alone (track() minus Ultralytics pre/infer/NMS times)"
+    }
+  }
+}

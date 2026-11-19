@@ -29,6 +29,43 @@ def ci(v: list[float]) -> str:
     return f"{v[0]:.3f}–{v[1]:.3f}"
 
 
+def missed_target() -> str:
+    """Names the detectors whose validation search never reached the recall target (they get the grid's floor)."""
+    op = load("operating_points.json") or {"models": {}}
+    missed = [k for k, v in op["models"].items() if not v["reached_target"]]
+    return f"; {', '.join(missed)} never reaches that target, so it gets the floor of the search grid" if missed else ""
+
+
+def val_vs_test(d: dict) -> list[str]:
+    """Pedestrian recall within 30 m at the chosen confidence: on validation (training towns' held-out frames) and on
+    the unseen test town. The gap is how much the validation frames overstate generalisation."""
+    op = (load("operating_points.json") or {}).get("models", {})
+    lines = []
+    for label, m in d["models"].items():
+        if label not in op or m.get("operating_conf_source") != "validation":
+            continue
+        r = m["recall_by_distance"]["pedestrian"]
+        bands = [r[k] for k in ("0-15m", "15-30m") if r[k]["recall"] is not None]
+        n = sum(b["n"] for b in bands)
+        test = sum(b["recall"] * b["n"] for b in bands) / n if n else None
+        v = op[label]
+        if test is not None:
+            lines.append(
+                f"- {label}: validation {v['recall_at_conf']:.2f} (n={v['n_objects']}) → unseen town {test:.2f} (n={n})"
+            )
+    if not lines:
+        return []
+    return [
+        "Pedestrian recall within 30 m at the chosen confidence, validation → unseen test town:",
+        "",
+        *lines,
+        "",
+        "Validation frames come from the training towns, so they overstate how well the detector generalises: the "
+        "confidence picked there does not deliver the same recall in a new town.",
+        "",
+    ]
+
+
 def detection() -> list[str]:
     d = load("detection_eval.json")
     if not d:
@@ -40,9 +77,9 @@ def detection() -> list[str]:
         "vehicle boxes). Classes collapsed to pedestrian / vehicle so a COCO model and the CARLA-tuned model are "
         "scored on the same label space. 95 % CI: bootstrap over frames.",
         "",
-        "| Detector | mAP50-95 (95 % CI) | mAP50 (95 % CI) | AP pedestrian | AP vehicle | "
+        "| Detector | mAP50-95 (95 % CI) | mAP50 (95 % CI) | AP pedestrian | AP vehicle | Operating confidence | "
         "Pedestrian recall < 15 m | 15–30 m | 30–50 m |",
-        "|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for label, m in d["models"].items():
         r = m["recall_by_distance"]["pedestrian"]
@@ -50,12 +87,17 @@ def detection() -> list[str]:
         rows.append(
             f"| {label} (`{Path(m['weights']).name}`) | **{m['map50_95']:.3f}** ({ci(m['map50_95_ci95'])}) | "
             f"{m['map50']:.3f} ({ci(m['map50_ci95'])}) | {m['per_class_map50_95']['pedestrian']:.3f} | "
-            f"{m['per_class_map50_95']['vehicle']:.3f} | {fmt('0-15m')} | {fmt('15-30m')} | {fmt('30-50m')} |"
+            f"{m['per_class_map50_95']['vehicle']:.3f} | {m['operating_conf']}"
+            f"{' (val)' if m.get('operating_conf_source') == 'validation' else ''} | "
+            f"{fmt('0-15m')} | {fmt('15-30m')} | {fmt('30-50m')} |"
         )
     rows += [
         "",
-        f"Recall is at the pipeline's operating confidence ({next(iter(d['models'].values()))['operating_conf']}), "
-        "IoU ≥ 0.5. Source: `reports/detection_eval.json`.",
+        "Recall is at each detector's operating confidence, IoU ≥ 0.5. (val) = chosen on the training towns' "
+        "held-out frames as the strictest confidence with pedestrian recall ≥ 0.85 within 30 m "
+        f"(`reports/operating_points.json`{missed_target()}). Source: `reports/detection_eval.json`.",
+        "",
+        *val_vs_test(d),
         "",
     ]
     return rows
@@ -127,26 +169,66 @@ def precision() -> list[str]:
     return rows
 
 
+LABELS = {
+    "bytetrack.yaml": "ByteTrack",
+    "botsort.yaml": "BoT-SORT",
+    "botsort_nogmc.yaml": "BoT-SORT, no camera-motion compensation",
+}
+
+
 def tracking() -> list[str]:
+    choice = load("tracker_choice.json")
     rows = [
-        "### Tracking: unseen test town (same detections for both trackers)",
+        "### Tracking: tracker chosen on validation, then scored once on the unseen test town",
         "",
-        "| Tracker | MOTA | IDF1 | ID switches | Precision | Recall | Mostly tracked / lost |",
-        "|---|---|---|---|---|---|---|",
     ]
-    found = False
-    for name, label in (("tracking_bytetrack.json", "ByteTrack"), ("tracking_botsort.json", "BoT-SORT")):
+    if choice:
+        idf1 = ", ".join(f"{LABELS.get(k, k)} {v:.3f}" for k, v in choice["idf1"].items())
+        rows += [
+            f"Validation ({len(choice['sequences'])} training towns, held-out last 15 % of each sequence), IDF1: "
+            f"{idf1}; chosen: **{LABELS.get(choice['chosen'], choice['chosen'])}** ({choice['criterion']}). "
+            "The test town below only reports that choice, it did not make it.",
+            "",
+        ]
+        if choice.get("budget_added_after_first_run"):
+            rows += [
+                "The latency budget was added after the first validation run, on validation timings only: full "
+                f"BoT-SORT's step reached {choice['step_p95_ms'].get('botsort.yaml')} ms p95, most of a 50 ms frame at "
+                "20 Hz. The test town shows what that costs: without camera-motion compensation, BoT-SORT falls to "
+                "ByteTrack's level there, although validation showed only a small gap. Motion compensation on a "
+                "downscaled frame is the next candidate, to be judged on validation.",
+                "",
+            ]
+    rows += [
+        "| Tracker | MOTA | IDF1 | ID switches | Precision | Recall | Mostly tracked / lost | "
+        "Tracker step p50 / p95 (ms) |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    found, meta = False, None
+    for key in LABELS:
+        name = f"tracking_{Path(key).stem}.json"
         t = load(name)
-        if t:
-            found = True
-            o = t["OVERALL"]
-            rows.append(
-                f"| {label} | {o['mota']:.3f} | {o['idf1']:.3f} | {int(o['num_switches'])} | {o['precision']:.3f} | "
-                f"{o['recall']:.3f} | {int(o['mostly_tracked'])} / {int(o['mostly_lost'])} |"
-            )
-    meta = (load("tracking_bytetrack.json") or {}).get("_meta")
-    note = f"Detector: `{Path(meta['weights']).name}`, confidence {meta['conf']}. " if meta else ""
-    rows += ["", note + "Source: `reports/tracking_*.json`.", ""]
+        if not t:
+            continue
+        found, meta = True, meta or t.get("_meta")
+        o, a = t["OVERALL"], t.get("_meta", {}).get("association_ms")
+        label = LABELS[key] + (" (chosen)" if choice and choice["chosen"] == key else "")
+        rows.append(
+            f"| {label} | {o['mota']:.3f} | {o['idf1']:.3f} | {int(o['num_switches'])} | {o['precision']:.3f} | "
+            f"{o['recall']:.3f} | {int(o['mostly_tracked'])} / {int(o['mostly_lost'])} | "
+            + (f"{a['p50']} / {a['p95']} |" if a else "– |")
+        )
+    note = ""
+    if meta:
+        src = " (chosen on validation)" if meta.get("conf_source") == "validation" else ""
+        note = f"Detector: `{Path(meta['weights']).name}`, confidence {meta['conf']}{src}, "
+        note += "same detections for every tracker. "
+    rows += [
+        "",
+        note + "Tracker step = the association alone, timed per frame on this laptop's CPU (BoT-SORT also "
+        "estimates camera motion). Source: `reports/tracking_*.json`, `reports/tracker_choice.json`.",
+        "",
+    ]
     return rows if found else []
 
 

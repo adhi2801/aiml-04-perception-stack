@@ -1,0 +1,32 @@
+{
+  "split": "validation: last 15% of each training sequence",
+  "sequences": [
+    "Town01_sunset",
+    "Town03_clear",
+    "Town03_rain",
+    "Town04_cloudy",
+    "Town05_wet"
+  ],
+  "models": {
+    "coco": {
+      "weights": "yolo11s.pt",
+      "conf": 0.05,
+      "recall_at_conf": 0.691,
+      "target_recall": 0.85,
+      "max_dist_m": 30.0,
+      "n_objects": 81,
+      "false_detections_per_frame": 3.29,
+      "reached_target": false
+    },
+    "carla": {
+      "weights": "models/yolo11s_carla.pt",
+      "conf": 0.31,
+      "recall_at_conf": 0.864,
+      "target_recall": 0.85,
+      "max_dist_m": 30.0,
+      "n_objects": 81,
+      "false_detections_per_frame": 0.1,
+      "reached_target": true
+    }
+  }
+}

@@ -1,26 +1,43 @@
 {
   "Town02_test": {
-    "mota": 0.36446360153256707,
-    "motp": 0.2604036115550841,
-    "idf1": 0.5698795180722892,
-    "num_switches": 35.0,
+    "mota": 0.42768199233716475,
+    "motp": 0.18495567320196807,
+    "idf1": 0.5892626131953428,
+    "num_switches": 21.0,
     "mostly_tracked": 8.0,
-    "mostly_lost": 25.0,
-    "num_false_positives": 218.0,
-    "num_misses": 1074.0,
-    "precision": 0.823051948051948,
-    "recall": 0.48563218390804597
+    "mostly_lost": 32.0,
+    "num_false_positives": 45.0,
+    "num_misses": 1129.0,
+    "precision": 0.9551792828685259,
+    "recall": 0.4592911877394636
   },
   "OVERALL": {
-    "mota": 0.36446360153256707,
-    "motp": 0.2604036115550841,
-    "idf1": 0.5698795180722892,
-    "num_switches": 35.0,
+    "mota": 0.42768199233716475,
+    "motp": 0.18495567320196807,
+    "idf1": 0.5892626131953428,
+    "num_switches": 21.0,
     "mostly_tracked": 8.0,
-    "mostly_lost": 25.0,
-    "num_false_positives": 218.0,
-    "num_misses": 1074.0,
-    "precision": 0.823051948051948,
-    "recall": 0.48563218390804597
+    "mostly_lost": 32.0,
+    "num_false_positives": 45.0,
+    "num_misses": 1129.0,
+    "precision": 0.9551792828685259,
+    "recall": 0.4592911877394636
+  },
+  "_meta": {
+    "weights": "models/yolo11s_carla.pt",
+    "tracker": "botsort.yaml",
+    "conf": 0.31,
+    "conf_source": "validation",
+    "min_height": 20,
+    "val_tail": null,
+    "sequences": [
+      "Town02_test"
+    ],
+    "association_ms": {
+      "p50": 23.19,
+      "p95": 45.77,
+      "frames": 599,
+      "note": "per-frame time of the tracker step alone (track() minus Ultralytics pre/infer/NMS times)"
+    }
   }
 }
