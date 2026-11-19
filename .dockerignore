@@ -1,0 +1,16 @@
+.venv
+.git
+runs
+wandb
+logs
+data
+models
+reports/*.mp4
+reports/*.log
+ros2_ws/build
+ros2_ws/install
+ros2_ws/log
+**/__pycache__
+*.engine
+*.pt
+*.onnx

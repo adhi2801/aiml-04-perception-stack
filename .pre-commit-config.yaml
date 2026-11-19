@@ -1,0 +1,27 @@
+# pip install pre-commit && pre-commit install
+# Same gates as CI: ruff lint + format, and the README results tables must match reports/*.json.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      - id: ruff
+        files: ^(src|carla_tools|tests|scripts|ros2_ws/src)/
+      - id: ruff-format
+        files: ^(src|carla_tools|tests|scripts|ros2_ws/src)/
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2000]
+      - id: end-of-file-fixer
+        exclude: ^reports/
+  - repo: local
+    hooks:
+      - id: readme-drift
+        name: README results match reports/*.json
+        entry: python scripts/results_table.py --check
+        language: system
+        pass_filenames: false
+        files: ^(README\.md|reports/.*\.json|scripts/results_table\.py)$

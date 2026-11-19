@@ -14,6 +14,9 @@ to ONNX and TensorRT and benchmarked on a 4 GB laptop GPU.
 | Runtime | CARLA 0.9.16 → ROS2 Jazzy nodes → brake command; PyTorch / ONNX Runtime / TensorRT FP16 / INT8 |
 | Tracking of experiments | Weights & Biases |
 
+Quick start: `make setup && make assets && make demo` (no CARLA needed; the weights + data release that `make assets` downloads is not published yet); `make check` runs the CI gates; `make docker` builds a CPU image.
+Cards: [model card](docs/MODEL_CARD.md), [data card](docs/DATA_CARD.md).
+
 ## Results
 
 Every number is written by a script into `reports/` (nothing is typed by hand).
