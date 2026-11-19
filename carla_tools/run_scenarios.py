@@ -186,6 +186,7 @@ def run_trial(
         pipe.model.predictor = None  # reset ByteTrack state
 
         braking, first_visible, first_brake, min_gap, fps = False, None, None, 1e9, []
+        gap_at_brake, kmh_at_brake = None, None
         impact_kmh, kmh = None, 0.0
         for step in range(int(args.seconds * args.fps)):
             kmh = ego.get_velocity().length() * 3.6  # speed going into this tick (the impact speed if we hit now)
@@ -206,7 +207,9 @@ def run_trial(
             if first_visible is None and any(g["id"] == hazard.id for g in visible):
                 first_visible = t
             if res.action == Action.BRAKE:
-                first_brake = t if first_brake is None else first_brake
+                if first_brake is None:
+                    first_brake, kmh_at_brake = t, kmh
+                    gap_at_brake = ego.get_location().distance(hazard.get_location()) - ego.bounding_box.extent.x
                 if not braking:
                     ego.set_autopilot(False, tm.get_port())
                     braking = True
@@ -232,8 +235,15 @@ def run_trial(
             "collided": impact_kmh is not None,
             "impact_kmh": round(impact_kmh, 1) if impact_kmh is not None else 0.0,
             "min_gap_m": round(min_gap, 2),
-            "reaction_s": round(first_brake - first_visible, 2)
+            # From the hazard first being in the camera's view (it may still be on the kerb) to the first brake:
+            # this includes the time before braking was needed, so it is not a reaction latency.
+            "visible_to_brake_s": round(first_brake - first_visible, 2)
             if first_brake is not None and first_visible is not None
+            else None,
+            # How late braking started: the true gap at the first brake, and that gap over the ego speed then.
+            "gap_at_brake_m": round(gap_at_brake, 2) if gap_at_brake is not None else None,
+            "ttc_at_brake_s": round(gap_at_brake / (kmh_at_brake / 3.6), 2)
+            if gap_at_brake is not None and kmh_at_brake and kmh_at_brake > 1
             else None,
             "braked": first_brake is not None,
             "mean_fps": round(float(np.mean(fps)), 1),
@@ -266,7 +276,7 @@ def main() -> None:
     args = ap.parse_args()
 
     client = carla.Client(args.host, args.port)
-    client.set_timeout(30)
+    client.set_timeout(120)  # load_world on a 4 GB GPU can take over a minute
     pipe = PerceptionPipeline(args.config, use_depth_model=not args.oracle_depth, weights=args.weights)
     writer = None
     if args.video:
@@ -285,7 +295,7 @@ def main() -> None:
     if writer:
         writer.release()
 
-    reactions = [t["reaction_s"] for t in trials if t["reaction_s"] is not None]
+    ttcs = [t["ttc_at_brake_s"] for t in trials if t["ttc_at_brake_s"] is not None]
     by_speed = sc.summarize(trials)
     summary = {
         "scenario": scenario.name,
@@ -298,7 +308,7 @@ def main() -> None:
         "collision_rate": round(sum(t["collided"] for t in trials) / len(trials), 3),
         "brake_rate": round(sum(t["braked"] for t in trials) / len(trials), 3),
         "median_min_gap_m": round(float(np.median([t["min_gap_m"] for t in trials])), 2),
-        "median_reaction_s": round(float(np.median(reactions)), 2) if reactions else None,
+        "median_ttc_at_brake_s": round(float(np.median(ttcs)), 2) if ttcs else None,
         "mean_fps": round(float(np.mean([t["mean_fps"] for t in trials])), 1),
         "per_trial": trials,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),

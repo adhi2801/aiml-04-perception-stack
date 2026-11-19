@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
 from pathlib import Path
 
@@ -300,19 +301,20 @@ def ncap() -> list[str]:
         "### Closed loop in CARLA: does the car stop? (Euro NCAP-style)",
         "",
         "| Scenario | Detector | Test speed | Trials | Avoided | Mean impact speed | Mean speed reduction | "
-        "Median reaction (s) |",
+        "Median TTC at first brake (s) |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for f in files:
         s = json.loads(f.read_text())
-        name = s["scenario"] + (" (oracle depth)" if s.get("oracle_depth") else "")
+        oracles = [n for n, k in (("detection", "oracle_detection"), ("depth", "oracle_depth")) if s.get(k)]
+        name = s["scenario"] + (f" (oracle {' + '.join(oracles)})" if oracles else "")
         for r in s["by_speed"]:
-            react = [
-                t["reaction_s"]
+            ttc = [
+                t["ttc_at_brake_s"]
                 for t in s["per_trial"]
-                if t["test_kmh"] == r["test_kmh"] and t["reaction_s"] is not None
+                if t["test_kmh"] == r["test_kmh"] and t.get("ttc_at_brake_s") is not None
             ]
-            med = f"{sorted(react)[len(react) // 2]:.2f}" if react else "–"
+            med = f"{statistics.median(ttc):.2f}" if ttc else "–"
             rows.append(
                 f"| {name} | `{Path(s['weights']).name}` | {r['test_kmh']:g} km/h | {r['trials']} | "
                 f"**{r['avoided_rate']:.0%}** | {r['mean_impact_kmh']:.1f} km/h | "
