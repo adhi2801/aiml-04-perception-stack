@@ -51,6 +51,35 @@ def sync_world(client: carla.Client, fps: float = 20.0, town: str | None = None)
         world.apply_settings(original)
 
 
+_STRAIGHT: dict[str, list[int]] = {}
+
+
+def straight_spawn_points(cmap, length: float = 140.0, step: float = 5.0, max_turn_deg: float = 3.0) -> list[int]:
+    """Spawn points with `length` m of straight road ahead and no junction or fork: on these the hazard placed
+    ahead is on the only path the car can take (a junction lets the autopilot turn away from it)."""
+    if cmap.name in _STRAIGHT:
+        return _STRAIGHT[cmap.name]
+    out = []
+    for i, sp in enumerate(cmap.get_spawn_points()):
+        cur = cmap.get_waypoint(sp.location)
+        if cur is None or cur.is_junction:
+            continue
+        yaw0, travelled, ok = cur.transform.rotation.yaw, 0.0, True
+        while travelled < length:
+            nxt = cur.next(step)
+            if len(nxt) != 1 or nxt[0].is_junction:
+                ok = False
+                break
+            cur, travelled = nxt[0], travelled + step
+            if abs((cur.transform.rotation.yaw - yaw0 + 180) % 360 - 180) > max_turn_deg:
+                ok = False
+                break
+        if ok:
+            out.append(i)
+    _STRAIGHT[cmap.name] = out
+    return out
+
+
 def spawn_ego(world, actors, spawn_index: int = 0, blueprint: str = "vehicle.tesla.model3") -> carla.Vehicle:
     bp = world.get_blueprint_library().find(blueprint)
     bp.set_attribute("role_name", "hero")

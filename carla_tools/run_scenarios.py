@@ -39,6 +39,7 @@ from carla_common import (
     gt_boxes,
     rgb_to_bgr,
     spawn_ego,
+    straight_spawn_points,
     sync_world,
 )
 
@@ -165,7 +166,10 @@ def run_trial(
     spec = CamSpec(pipe.w, pipe.h, pipe.fov, z=pipe.cam_h)
     scenario = scenario if scenario is not None else args.scenario
     with sync_world(client, fps=args.fps) as (world, tm, actors):
-        ego = spawn_ego(world, actors, spawn_index=args.spawn + trial % 5)
+        straight = straight_spawn_points(world.get_map())
+        if not straight:
+            raise RuntimeError(f"{world.get_map().name}: no spawn point with a straight road ahead")
+        ego = spawn_ego(world, actors, spawn_index=straight[(args.spawn + trial) % len(straight)])
         set_conditions(world, ego, **(conditions or {}))
         rgb_cam, rgb_q = attach_camera(world, actors, ego, spec, "rgb")
         _, depth_q = attach_camera(world, actors, ego, spec, "depth")
@@ -174,6 +178,7 @@ def run_trial(
         tm.ignore_walkers_percentage(ego, 100)
         tm.ignore_vehicles_percentage(ego, 100)
         tm.ignore_lights_percentage(ego, 100)
+        tm.auto_lane_change(ego, False)  # stay in the lane the hazard is placed in
         tm.set_desired_speed(ego, test_kmh)
         world.tick()
         hazard, hazard_tick = setup_hazard(world, actors, ego, scenario, rng, tm, test_kmh, occluded=occluded)
